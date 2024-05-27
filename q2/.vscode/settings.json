@@ -1,0 +1,9 @@
+{
+    "makefile.launchConfigurations": [
+        {
+            "cwd": "/home/sam/Desktop/git/Operating-Systems/Operating-Systems-Ex2/q2",
+            "binaryPath": "/home/sam/Desktop/git/Operating-Systems/Operating-Systems-Ex2/q2/mync",
+            "binaryArgs": ["-e", "./ttt 123456789"]
+        }
+    ]
+}
