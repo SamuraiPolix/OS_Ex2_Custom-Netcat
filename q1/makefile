@@ -24,19 +24,7 @@ valgrind: ttt
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Graph.o: Graph.cpp Graph.hpp
-# 	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-
-# Test.o: Test.cpp doctest.h
-# 	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-
-# TestCounter.o: TestCounter.cpp
-# 	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-
-# Algorithms.o: Algorithms.cpp Algorithms.hpp
+# ttt.o: ttt.cpp
 # 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
