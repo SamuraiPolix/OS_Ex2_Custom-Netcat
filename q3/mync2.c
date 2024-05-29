@@ -9,6 +9,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <sys/wait.h>
 
 #define SERVERPORT "4950"	// the port users will be connecting to
 #define MYPORT "5050"
@@ -113,7 +114,21 @@ int createTcpListener(char* port)
 	}
 
 	freeaddrinfo(servinfo);
-	return sockfd;
+
+	printf("listener: waiting to accept connection...\n");
+
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    int client_sock = accept(sockfd, (struct sockaddr *) &client_addr, &client_len);
+    if (client_sock < 0) {
+        perror("accept");
+        close(sockfd);
+        exit(1);
+    }
+
+    printf("Server is listening\n");
+
+    return client_sock;
 }
 
 
@@ -184,6 +199,12 @@ int main(int argc, char *argv[])
 	pid_t pid = fork();
 	if (pid == -1) {
 		perror("fork");
+		if (inputSocket != -1) {
+			close(inputSocket);
+		}
+		if(outputSocket != -1) {
+			close(outputSocket);
+		}
 		exit(1);
 	}
 
@@ -201,13 +222,33 @@ int main(int argc, char *argv[])
 		exit(0);
     }
 	else {  // parent
-        if (inputSocket != -1) {
-            handle_connection(inputSocket, 1);
-        }
-        if (outputSocket != -1) {
-            handle_connection(outputSocket, 0);
-        }
+        // if (inputSocket != -1) {
+        //     handle_connection(inputSocket, 1);
+        // }
+        // if (outputSocket != -1) {
+        //     handle_connection(outputSocket, 0);
+        // }
+		int status; // store status of waitpid
+		waitpid(pid, &status, 0);	// wait for the child to finish
+		// check if the child exited normally
+		if (status != 0) {
+			perror("child process failed");
+			if (inputSocket != -1) {
+				close(inputSocket);
+			}
+			if(outputSocket != -1) {
+				close(outputSocket);
+			}	
+			exit(1);
+		}
     }
+
+	if (inputSocket != -1) {
+		close(inputSocket);
+	}
+	if(outputSocket != -1) {
+		close(outputSocket);
+	}
 
 
 	// int sockfd = createUdpTalker();

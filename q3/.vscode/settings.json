@@ -5,5 +5,8 @@
             "binaryPath": "/home/sam/Desktop/git/Operating-Systems/Operating-Systems-Ex2/q3/mync2",
             "binaryArgs": ["-e", "../q1/ttt 123456789"]
         }
-    ]
+    ],
+    "files.associations": {
+        "wait.h": "c"
+    }
 }

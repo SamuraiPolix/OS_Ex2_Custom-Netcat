@@ -72,24 +72,18 @@ int main(void)
 
 	freeaddrinfo(servinfo);
 
-	printf("listener: waiting to recvfrom...\n");
+	printf("listener: waiting to accept connection...\n");
 
-	addr_len = sizeof their_addr;
-	if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN-1 , 0,
-		(struct sockaddr *)&their_addr, &addr_len)) == -1) {
-		perror("recvfrom");
-		exit(1);
-	}
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    int sock = accept(sockfd, (struct sockaddr *) &client_addr, &client_len);
+    if (sock < 0) {
+        perror("accept");
+        close(sockfd);
+        exit(1);
+    }
 
-	printf("listener: got packet from %s\n",
-		inet_ntop(their_addr.ss_family,
-			get_in_addr((struct sockaddr *)&their_addr),
-			s, sizeof s));
-	printf("listener: packet is %d bytes long\n", numbytes);
-	buf[numbytes] = '\0';
-	printf("listener: packet contains \"%s\"\n", buf);
+    printf("Server is listening\n");
 
-	close(sockfd);
-
-	return 0;
+    return sock;
 }
