@@ -18,8 +18,21 @@ int numbytes=101;
 int runProgram(char argv[]);
 void handle_connection(int sockfd, int is_input);
 
-int createTcpTalker()
+int createTcpTalker(char* address)
 { 
+	// address is in the format of "IP,PORT", separate them
+	char* temp = address;
+	while (*temp != ',' && *temp != '\0') {
+		temp++;
+	}
+	if (*temp == '\0') {
+		fprintf(stderr, "Invalid address.\n");
+		exit(1);
+	}
+	*temp = '\0';
+	temp++;
+	char* serverPort = temp;
+
 	int sockfd;
 	struct addrinfo hints;
 	struct addrinfo *servinfo;
@@ -30,7 +43,7 @@ int createTcpTalker()
 	hints.ai_family = AF_INET; // set to AF_INET to use IPv4
 	hints.ai_socktype = SOCK_STREAM;		// TCP
 
-	if ((rv = getaddrinfo(DESTADDR, SERVERPORT, &hints, &servinfo)) != 0) {
+	if ((rv = getaddrinfo(address, serverPort, &hints, &servinfo)) != 0) {
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
 		return 1;
 	}
@@ -58,7 +71,7 @@ void *get_in_addr(struct sockaddr *sa)
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-int createTcpListener()
+int createTcpListener(char* port)
 {
 	int sockfd;
 	struct addrinfo hints, *servinfo, *p;
@@ -74,7 +87,7 @@ int createTcpListener()
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_flags = AI_PASSIVE; // use my IP
 
-	if ((rv = getaddrinfo(NULL, MYPORT, &hints, &servinfo)) != 0) {
+	if ((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0) {
 		fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
 		return 1;
 	}
@@ -142,23 +155,23 @@ int main(int argc, char *argv[])
 			i++;
 			if (strncmp(argv[i], "TCPS", 4) == 0) {
 				// Open a server and listen on it
-				inputSocket = createTcpListener();
+				inputSocket = createTcpListener(argv[i]+4);
 			}
-			if (strncmp(argv[i], "TCPC", 4) == 0) {
-				// open a client and listen on it
-				inputSocket = createTcpListener();
-			}
+			// if (strncmp(argv[i], "TCPC", 4) == 0) {
+			// 	// open a client and listen on it
+			// 	inputSocket = createTcpListener();
+			// }
 		}
 		if (strcmp(argv[i], "-o") == 0) {
 			// send output to opened socket
 			i++;
 			if (strncmp(argv[i], "TCPS", 4) == 0) {
 				// Open a server and talk on it
-				outputSocket = createTcpTalker();
+				outputSocket = createTcpTalker(argv[i]+4);
 			}
 			if (strncmp(argv[i], "TCPC", 4) == 0) {
 				// Open a server and talk on it
-				outputSocket = createTcpTalker();
+				outputSocket = createTcpTalker(argv[i]+4);
 			}
 		}
 	}
