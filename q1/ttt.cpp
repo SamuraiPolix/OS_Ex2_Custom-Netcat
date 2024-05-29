@@ -77,8 +77,14 @@ int main(int argc, char* argv[]){
             // inside a loop to keep asking for inputs if input is bad
             while (!foundSquare){
                 cin >> choose;
+                if (choose == ' ' || choose == '\n'){
+                    continue;
+                }
+                if (choose < 1 || choose > 9){
+                    cout << "Invalid input, received '" << choose << "'- choose a number between 1 and 9: ";
+                }
                 // check if the square is available and act accordingly
-                if (board[(choose-1)/3][(choose-1)%3] != 'X' && board[(choose-1)/3][(choose-1)%3] != 'O'){
+                else if (board[(choose-1)/3][(choose-1)%3] != 'X' && board[(choose-1)/3][(choose-1)%3] != 'O'){
                     // This square is available - place O
                     foundSquare = true;
                     board[(choose-1)/3][(choose-1)%3] = 'O';
