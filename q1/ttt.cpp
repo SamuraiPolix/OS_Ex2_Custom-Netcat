@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cstring>
 #include <cmath>
+#include <limits>
 
 #define TEN_POW_8 100000000
 #define DIGITS 9
@@ -11,7 +12,7 @@ void initBoard(char board[3][3], int size);
 int checkWinner(char board[3][3], int size);
 bool isValidNumber(int num);
 
-using std::cout, std::endl, std::cin;
+using std::cout, std::endl, std::cin, std::streamsize, std::max, std::numeric_limits;
 
 int main(int argc, char* argv[]){
     if (argc != 2){
@@ -72,22 +73,22 @@ int main(int argc, char* argv[]){
         else {
             // Ask player for input
             cout << " Choose a square out of the available ones: ";
-            int choose;
+            char chooseChar;
 
             // inside a loop to keep asking for inputs if input is bad
             while (!foundSquare){
-                cin >> choose;
-                if (choose == ' ' || choose == '\n'){
-                    continue;
-                }
-                if (choose < 1 || choose > 9){
-                    cout << "Invalid input, received '" << choose << "'- choose a number between 1 and 9: ";
+                cin >> chooseChar;
+                int chooseInt = chooseChar - '0';
+                if (std::cin.fail() || chooseInt < 1 || chooseInt > 9){
+                    cout << "Invalid input, received '" << chooseInt << "'- choose a number between 1 and 9: ";
+                    cin.clear();
+                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
                 }
                 // check if the square is available and act accordingly
-                else if (board[(choose-1)/3][(choose-1)%3] != 'X' && board[(choose-1)/3][(choose-1)%3] != 'O'){
+                else if (board[(chooseInt-1)/3][(chooseInt-1)%3] != 'X' && board[(chooseInt-1)/3][(chooseInt-1)%3] != 'O'){
                     // This square is available - place O
                     foundSquare = true;
-                    board[(choose-1)/3][(choose-1)%3] = 'O';
+                    board[(chooseInt-1)/3][(chooseInt-1)%3] = 'O';
                 }
                 else {
                     cout << "This square is taken - choose another: ";
