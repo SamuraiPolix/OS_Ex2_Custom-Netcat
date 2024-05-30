@@ -52,6 +52,7 @@ int main(int argc, char *argv[])
 	int outputSocket = -1;
 	// UDP
 	int isUdpTalker = 0;		// we handle udp talker differently than tcp
+	int isUdpListener = 0;
 	struct sockaddr_in server_addr;
 
 	// skiping the first because its the name of this program
@@ -81,6 +82,7 @@ int main(int argc, char *argv[])
 			else if (strncmp(argv[i], "UDPS", 4) == 0) {
 				// Open a server and listen on it
 				inputSocket = createUdpListener(argv[i]+4);
+				isUdpListener = 1;
 			}
 		}
 		else if (strcmp(argv[i], "-o") == 0) {
@@ -97,7 +99,7 @@ int main(int argc, char *argv[])
 			// Output needs to support UDP client only (not server)
 			else if (strncmp(argv[i], "UDPC", 4) == 0) {
 				// open a client and listen on it
-				inputSocket = createUdpTalker(argv[i]+4, &server_addr);
+				outputSocket = createUdpTalker(argv[i]+4, &server_addr);
 				isUdpTalker = 1;
 			}
 		}
@@ -107,6 +109,7 @@ int main(int argc, char *argv[])
 			if (strncmp(argv[i], "TCPS", 4) == 0) {
 				// Open a server, listen and talk on it
 				inputSocket = outputSocket = createTcpListener(argv[i]+4);
+				isUdpListener = 1;
 			}
 			else if (strncmp(argv[i], "TCPC", 4) == 0) {
 				// Open a server and talk on it
@@ -123,14 +126,13 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
-
 	if (inputSocket == -1 && outputSocket == -1) {
         runProgram(command);
 		exit(0);
     }
 
 	pid_t pid = fork();
-	sleep(2);
+	// sleep(12);
 	if (pid == -1) {
 		perror("fork");
 		if (inputSocket != -1) {
@@ -154,6 +156,8 @@ int main(int argc, char *argv[])
 				// using server_addr from createUdpTalker
 				char buffer[1024];
 				int bytes_received = 0;
+				int time = 1;
+				wait(&time);
 				// keep reading from stdin and sending to the server until EOF
 				while ((bytes_received = read(STDIN_FILENO, buffer, sizeof(buffer) - 1)) > 0)
 				{
@@ -168,6 +172,29 @@ int main(int argc, char *argv[])
 		exit(0);
     }
 	else {  // parent
+	// placed here to work if we want both input and output, 1 thread cant handle them both in UDP because we need an infinity while to read and write for each
+		if (isUdpListener == 1){	
+			// If inputSocket is a UDP socket, handle incoming data
+			char buffer[1024];
+			struct sockaddr_in client_addr;
+			socklen_t addr_len = sizeof(client_addr);
+			while (1) {
+				// fflush(stdout);
+				int time = 1;
+				wait(&time);
+				int numbytes = recvfrom(inputSocket, buffer, sizeof(buffer) - 1, 0, (struct sockaddr *)&client_addr, &addr_len);
+				if (numbytes == -1) {
+					perror("recvfrom");
+					exit(1);
+				}
+				buffer[numbytes] = '\0';
+				// printf("Received: %s\n", buffer);
+				// Write the received data to stdout or it's replacement
+				// write(STDIN_FILENO, buffer, numbytes);
+				write(STDOUT_FILENO, buffer, numbytes);
+	
+			}
+		}
 		int status; // store status of waitpid
 		waitpid(pid, &status, 0);	// wait for the child to finish
 		// check if the child exited normally
@@ -402,7 +429,6 @@ int createUdpTalker(char* address, struct sockaddr_in* server_addr)
 
 		// copy address info to server_addr for later use (sendto in main)
         memcpy(server_addr, p->ai_addr, sizeof(struct sockaddr_in));
-        break;
 
 		break;
 	}
