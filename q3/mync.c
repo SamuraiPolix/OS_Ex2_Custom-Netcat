@@ -138,6 +138,7 @@ int main(int argc, char *argv[])
 				"-e <program arguments>: run a program with arguments\n"
 				"-i <parameter>: take input from opened parameter\n"
 				"-o <parameter>: send output to opened parameter\n\n"
+				"-b <parameter>: send output and input to opened parameter\n\n"
 				"Parameters:\n"
 				"TCPS<PORT>: open a TCP server on port PORT\n"
 				"TCPC<IP,PORT> / TCPC<hostname,port>: open a TCP client and connect to IP on port PORT\n");
