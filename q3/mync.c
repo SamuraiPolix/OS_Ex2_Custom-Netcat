@@ -1,3 +1,5 @@
+// THIS ALSO COVERS QUESTION 3.5!
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -166,7 +168,7 @@ int main(int argc, char *argv[])
 				// Open a server and listen on it
 				inputSocket = createTcpListener(argv[i]+4);
 			}
-			if (strncmp(argv[i], "TCPC", 4) == 0) {
+			else if (strncmp(argv[i], "TCPC", 4) == 0) {
 				// open a client and listen on it
 				inputSocket = createTcpTalker(argv[i]+4);
 			}
@@ -178,7 +180,7 @@ int main(int argc, char *argv[])
 				// Open a server and talk on it
 				outputSocket = createTcpListener(argv[i]+4);
 			}
-			if (strncmp(argv[i], "TCPC", 4) == 0) {
+			else if (strncmp(argv[i], "TCPC", 4) == 0) {
 				// Open a server and talk on it
 				outputSocket = createTcpTalker(argv[i]+4);
 			}
@@ -190,7 +192,7 @@ int main(int argc, char *argv[])
 				// Open a server, listen and talk on it
 				inputSocket = outputSocket = createTcpListener(argv[i]+4);
 			}
-			if (strncmp(argv[i], "TCPC", 4) == 0) {
+			else if (strncmp(argv[i], "TCPC", 4) == 0) {
 				// Open a server and talk on it
 				inputSocket = outputSocket = createTcpTalker(argv[i]+4);
 			}
