@@ -12,6 +12,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <sys/wait.h>
+#include <signal.h>
 
 #define SERVERPORT "4950"	// the port users will be connecting to
 #define MYPORT "5050"
@@ -31,6 +32,12 @@ int createTcpListener(char* port);
 int createUdpTalker(char* address, struct sockaddr_in* server_addr);
 int createUdpListener(char* port);
 
+void handle_alarm(int sig) {
+	printf("Timeout reached. Exiting all processes!\n");
+	kill(0, SIGTERM); // Send SIGTERM signal to the process group
+	exit(EXIT_SUCCESS);
+}
+
 
 int main(int argc, char *argv[])
 {
@@ -39,13 +46,14 @@ int main(int argc, char *argv[])
 				"Optional:\n"
 				"-e <program arguments>: run a program with arguments\n"
 				"-i <parameter>: take input from opened parameter\n"
-				"-o <parameter>: send output to opened parameter\n\n"
+				"-o <parameter>: send output to opened parameter\n"
+				"-b <parameter>: send output and input to opened parameter\n"
+				"-t <timeout>: set timeout for UDP connection. defaults to 0\n\n"
 				"Parameters:\n"
 				"TCPS<PORT>: open a TCP server on port PORT\n"
 				"TCPC<IP,PORT> / TCPC<hostname,port>: open a TCP client and connect to IP on port PORT\n");
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
-
 	char *command = NULL;
 	// store sockets (if arguments are given for them [-i will store a sockid into inputSocket, -o will store a sockid into outputSocket])
 	int inputSocket = -1;
@@ -53,19 +61,26 @@ int main(int argc, char *argv[])
 	// UDP
 	int isUdpTalker = 0;		// we handle udp talker differently than tcp
 	int isUdpListener = 0;
+	size_t timeout = 0;
 	struct sockaddr_in server_addr;
 
 	// skiping the first because its the name of this program
 	for (int i = 1; i<argc; i++) {
 		if (strcmp(argv[i], "-e") == 0) {
 			// run a program with arguments
-			i++;	// skip command
+			i++;	// skip -e
 			char *p = argv[i];		// run with a pointer to get until the end of the arguments (next '-' flag or end of line)
 			while (*(p+1) != '-' && *p != '\0') {
 				p++;
 			}
 			*p = '\0';	// null-terminate the arguments
 			command = argv[i];	// save a pointer to the command for later run (after we go over all the argvs here)
+		}
+		if (strcmp(argv[i], "-t") == 0) {
+			// set timeout for udp
+			i++;	// skip -t
+			timeout = atoi(argv[i]);
+			signal(SIGALRM, handle_alarm);	// set alarm handler
 		}
 		else if (strcmp(argv[i], "-i") == 0) {
 			// take input from opened socket
@@ -83,6 +98,10 @@ int main(int argc, char *argv[])
 				// Open a server and listen on it
 				inputSocket = createUdpListener(argv[i]+4);
 				isUdpListener = 1;
+			}
+			else if (strncmp(argv[i], "UDPC", 4) == 0) {
+				fprintf(stderr, "UDP Client doesn't support -i\n");
+				exit(EXIT_FAILURE);
 			}
 		}
 		else if (strcmp(argv[i], "-o") == 0) {
@@ -102,6 +121,10 @@ int main(int argc, char *argv[])
 				outputSocket = createUdpTalker(argv[i]+4, &server_addr);
 				isUdpTalker = 1;
 			}
+			else if (strncmp(argv[i], "UDPS", 4) == 0) {
+				fprintf(stderr, "UDP Server doesn't support -o\n");
+				exit(EXIT_FAILURE);
+			}
 		}
 		else if (strcmp(argv[i], "-b") == 0) {
 			// send output and input to 2 opened sockets
@@ -115,108 +138,194 @@ int main(int argc, char *argv[])
 				// Open a server and talk on it
 				inputSocket = outputSocket = createTcpTalker(argv[i]+4);
 			}
+			// UDP doesn't support -b
 			else if (strncmp(argv[i], "UDPS", 4) == 0) {
+				fprintf(stderr, "UDP doesn't support -b\n");
+				exit(EXIT_FAILURE);
 				// Open a server and listen on it
-				inputSocket = createUdpListener(argv[i]+4);
+				// inputSocket = outputSocket = createUdpListener(argv[i]+4);
+				// isUdpListener = 1;
+				// isUdpTalker = 1;
 			}
 			else if (strncmp(argv[i], "UDPC", 4) == 0) {
+				fprintf(stderr, "UDP doesn't support -b\n");
+				exit(EXIT_FAILURE);
 				// open a client and listen on it
-				inputSocket = createUdpTalker(argv[i]+4, &server_addr);
-				isUdpTalker = 1;
+				// inputSocket = outputSocket = createUdpTalker(argv[i]+4, &server_addr);
+				// isUdpListener = 1;
+				// isUdpTalker = 1;
 			}
 		}
 	}
-	if (inputSocket == -1 && outputSocket == -1) {
-        runProgram(command);
-		exit(0);
-    }
 
-	pid_t pid = fork();
-	// sleep(12);
-	if (pid == -1) {
-		perror("fork");
-		if (inputSocket != -1) {
-			close(inputSocket);
-		}
-		if(outputSocket != -1) {
-			close(outputSocket);
-		}
-		exit(1);
-	}
-    if (pid == 0) {  // child
-		// if -i or -o was given, we need to redirect the input/output to/from the sockets
-		if (inputSocket != -1) {
+    pid_t inputPid = -1, outputPid = -1, execPid = -1;
+    int inputPipe[2] = {-1, -1};
+	int outputPipe[2] = {-1, -1};
+
+	/* When -b (or -i and -o together) are given
+	 * We need to run 3 things at the same time - input, output and the program itself
+	 * So we use 3 forks to run them in parallel and pipes between them to redirect input/output
+	 */
+
+	// Fork and handle -i (input redirection)	
+	if (inputSocket != -1) {
+		// if not udp, simply redirect stdin
+		if (isUdpListener != 1){
 			dup2(inputSocket, STDIN_FILENO);
-			// close(STDIN_FILENO);
 		}
-		if (outputSocket != -1) {
-			// close(STDOUT_FILENO);
+		else {	// if its UDP, we need to handle it differently - fork a new process to handle the redirection
+			// create pipe to use between udp listener and prog exec
+			if (command != NULL && pipe(inputPipe) == -1) {
+				perror("pipe: input process.");
+				exit(EXIT_FAILURE);
+			}
+			if ((inputPid = fork()) == 0) {
+				close(inputPipe[0]);	// close the read end of the pipe
+				if (command != NULL){
+					dup2(inputPipe[1], STDOUT_FILENO);
+				}
+				char buffer[1024];
+				struct sockaddr_in client_addr;
+				socklen_t addr_len = sizeof(client_addr);
+				while (1) {
+					// set alarm for timeout
+					if (timeout != 0){
+						alarm(timeout);
+					}
+					int numbytes = recvfrom(inputSocket, buffer, sizeof(buffer) - 1, 0, (struct sockaddr *)&client_addr, &addr_len);
+					alarm(0);	// cancel alarm - we received data
+					if (numbytes == -1) {
+						perror("recvfrom: input process.");
+						exit(EXIT_FAILURE);
+					}
+					buffer[numbytes] = '\0';
+					// printf("Received: %s\n", buffer);
+					// Write the received data to stdout or it's replacement
+					// write(STDIN_FILENO, buffer, numbytes);
+					write(STDOUT_FILENO, buffer, numbytes);
+					fflush(stdout);  // Ensure the buffer is flushed immediately
+				}
+				close(inputPipe[1]);
+			}
+			else if (inputPid < 0) {		// forking failed
+				perror("fork: input process.");
+				// close sockets before exiting
+				if (inputSocket != -1) {
+					close(inputSocket);
+				}
+				if(outputSocket != -1) {
+					close(outputSocket);
+				}
+				exit(EXIT_FAILURE);
+			}
+		}
+	}
+
+	// Fork and handle -o (output redirection)	
+	if (outputSocket != -1) {	
+		// if not udp, simply redirect stdout
+		if (isUdpTalker != 1){
 			dup2(outputSocket, STDOUT_FILENO);
-			if (isUdpTalker == 1){
+		}
+		else {	// if its UDP, we need to handle it differently - fork a new process to handle the redirection
+			// if -e needs to run - create pipe to use between udp talker and prog exec. else - no need for pipe
+			if (command != NULL && pipe(outputPipe) == -1) {
+				perror("pipe: output process.");
+				exit(EXIT_FAILURE);
+			}
+			if ((outputPid = fork()) == 0) {
+				close(outputPipe[1]);	// close the write end of the pipe
+				if (command != NULL){
+					dup2(outputPipe[0], STDIN_FILENO);
+				}
+
 				// using server_addr from createUdpTalker
 				char buffer[1024];
 				int bytes_received = 0;
-				int time = 1;
-				wait(&time);
-				// keep reading from stdin and sending to the server until EOF
-				while ((bytes_received = read(STDIN_FILENO, buffer, sizeof(buffer) - 1)) > 0)
+				// keep reading from stdout until timeout from alarm
+				while (1)
 				{
+					// set alarm for timeout
+					if (timeout != 0){
+						alarm(timeout);
+					}
+					bytes_received = read(STDIN_FILENO, buffer, sizeof(buffer) - 1);
+					alarm(0);	// cancel alarm - we received data
+					if (bytes_received < 0) {
+						perror("read: output process.");
+						exit(EXIT_FAILURE);
+					}
 					buffer[bytes_received] = '\0';
 					sendto(outputSocket, buffer, bytes_received, 0, (struct sockaddr *)&server_addr, sizeof(server_addr));
+					// fflush(stdout);
 				}
 				close(outputSocket);
+				close(outputPipe[0]);
 			}
-			// close(STDOUT_FILENO);
-		}
-		runProgram(command);
-		exit(0);
-    }
-	else {  // parent
-	// placed here to work if we want both input and output, 1 thread cant handle them both in UDP because we need an infinity while to read and write for each
-		if (isUdpListener == 1){	
-			// If inputSocket is a UDP socket, handle incoming data
-			char buffer[1024];
-			struct sockaddr_in client_addr;
-			socklen_t addr_len = sizeof(client_addr);
-			while (1) {
-				// fflush(stdout);
-				int time = 1;
-				wait(&time);
-				int numbytes = recvfrom(inputSocket, buffer, sizeof(buffer) - 1, 0, (struct sockaddr *)&client_addr, &addr_len);
-				if (numbytes == -1) {
-					perror("recvfrom");
-					exit(1);
+			else if (outputPid < 0) {		// forking failed
+				perror("fork: output process.");
+				// close sockets before exiting
+				if (inputSocket != -1) {
+					close(inputSocket);
 				}
-				buffer[numbytes] = '\0';
-				// printf("Received: %s\n", buffer);
-				// Write the received data to stdout or it's replacement
-				// write(STDIN_FILENO, buffer, numbytes);
-				write(STDOUT_FILENO, buffer, numbytes);
-	
+				if(outputSocket != -1) {
+					close(outputSocket);
+				}
+				exit(EXIT_FAILURE);
 			}
 		}
-		int status; // store status of waitpid
-		waitpid(pid, &status, 0);	// wait for the child to finish
-		// check if the child exited normally
-		if (status != 0) {
-			perror("child process failed");
+	}
+
+	// Fork and handle -e (program exec)	
+	if (command != NULL) {
+		if ((execPid = fork()) == 0) {
+			if (inputPipe[0] != -1) {
+				close(inputPipe[1]); 			// Close unused write end
+				dup2(inputPipe[0], STDIN_FILENO); 		// Redirect stdin to read end of the pipe
+			}
+			if (outputPipe[1] != -1) {
+				close(outputPipe[0]); 			// Close unused read end
+				dup2(outputPipe[1], STDOUT_FILENO); 	// Redirect stdout to write end of the pipe
+			}
+			runProgram(command);
+			// close sockets before exiting
 			if (inputSocket != -1) {
 				close(inputSocket);
 			}
 			if(outputSocket != -1) {
 				close(outputSocket);
-			}	
-			exit(1);
+			}
+			exit(EXIT_SUCCESS);
 		}
-    }
+		else if (execPid < 0) {		// forking failed
+			perror("fork: program exec process.");
+			// close sockets before exiting
+			if (inputSocket != -1) {
+				close(inputSocket);
+			}
+			if(outputSocket != -1) {
+				close(outputSocket);
+			}
+			exit(EXIT_FAILURE);
+		}
+	}
 
-	// if (inputSocket != -1) {
-	// 	close(inputSocket);
-	// }
-	// if(outputSocket != -1) {
-	// 	close(outputSocket);
-	// }
-
+	// Parent process: wait for program exec to finish
+	if (execPid > 0) {
+		int status;
+		waitpid(execPid, &status, 0);
+		if (status != 0) {
+			fprintf(stderr, "Exec process failed\n");
+		}
+	}
+	
+    if (inputSocket != -1) {
+		close(inputSocket);
+	}
+	if(outputSocket != -1) {
+		close(outputSocket);
+	}	
+	
 	return 0;
 }
 
@@ -291,7 +400,7 @@ int createTcpTalker(char* address)
 	}
 	if (*temp == '\0') {
 		fprintf(stderr, "Invalid address.\n");
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 	*temp = '\0';
 	temp++;
@@ -320,7 +429,11 @@ int createTcpTalker(char* address)
 
 		break;
 	}
-	connect (sockfd, p->ai_addr, p->ai_addrlen);
+	if (connect (sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+		perror("talker: connect");
+		exit(EXIT_FAILURE);
+	}
+	
 	return sockfd;
 }
 
@@ -382,10 +495,10 @@ int createTcpListener(char* port)
     if (client_sock < 0) {
         perror("accept");
         close(sockfd);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
-    printf("Server is listening\n");
+    printf("Server is up\n");
 
     return client_sock;
 }
@@ -400,7 +513,7 @@ int createUdpTalker(char* address, struct sockaddr_in* server_addr)
 	}
 	if (*temp == '\0') {
 		fprintf(stderr, "Invalid address.\n");
-		exit(1);
+		exit(EXIT_FAILURE);
 	}
 	*temp = '\0';
 	temp++;
