@@ -73,7 +73,14 @@ int main(int argc, char *argv[])
 				"-t <timeout>: set timeout for UDP connection. defaults to 0\n\n"
 				"Parameters:\n"
 				"TCPS<PORT>: open a TCP server on port PORT\n"
-				"TCPC<IP,PORT> / TCPC<hostname,port>: open a TCP client and connect to IP on port PORT\n");
+				"TCPC<IP,PORT> / TCPC<hostname,port>: open a TCP client and connect to IP on port PORT\n"
+				"UDPS<PORT>: open a UDP server on port PORT\n"
+				"UDPC<IP,PORT> / UDPC<hostname,port>: open a UDP client and connect to IP on port PORT\n"
+				"UDSSD<path>: open a Unix Domain Sockets Datagram server on path\n"
+				"UDSCD<path>: open a Unix Domain Sockets Datagram client and connect to path\n"
+				"UDSSS<path>: open a Unix Domain Sockets Stream server on path\n"
+				"UDSCS<path>: open a Unix Domain Sockets Stream client and connect to path\n"
+				);
 		exitProgram(EXIT_FAILURE);
 	}
 	char *command = NULL;
@@ -267,8 +274,8 @@ int main(int argc, char *argv[])
 			// struct sockaddr client_addr;
 			// socklen_t addr_len = sizeof(client_addr);
 			while (1) {
-				// set alarm for timeout
-				if (timeout != 0){
+				// set alarm for timeout, only for datagram
+				if (isDatagram == 1 && timeout != 0){
 					alarm(timeout);
 				}
 				// int numbytes = recvfrom(inputSocket, buffer, sizeof(buffer) - 1, 0, (struct sockaddr *)&client_addr, &addr_len);
@@ -318,8 +325,8 @@ int main(int argc, char *argv[])
 			// keep reading from stdout until timeout from alarm
 			while (1)
 			{
-				// set alarm for timeout
-				if (timeout != 0){
+				// set alarm for timeout, only for datagram
+				if (isDatagram == 1 && timeout != 0){
 					alarm(timeout);
 				}
 				bytes_received = read(STDIN_FILENO, buffer, sizeof(buffer) - 1);
@@ -375,8 +382,8 @@ int main(int argc, char *argv[])
 			// keep reading from stdout until timeout from alarm
 			while (1)
 			{
-				// set alarm for timeout
-				if (timeout != 0){
+				// set alarm for timeout, only for datagram
+				if (isDatagram == 1 && timeout != 0){
 					alarm(timeout);
 				}
 				bytes_received = read(STDIN_FILENO, buffer, sizeof(buffer) - 1);
