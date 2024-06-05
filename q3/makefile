@@ -13,7 +13,7 @@ GCOV_OUTPUTS = gcov_outputs
 
 all: mync
 
-.PHONY: all clean
+.PHONY: all clean run
 
 run: mync
 	./$^

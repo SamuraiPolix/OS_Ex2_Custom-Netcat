@@ -13,7 +13,7 @@ OBJECTS=$(subst .cpp,.o,$(SOURCES))
 # all: mync TCP_Sender TCP_Receiver
 all: mync
 
-.PHONY: all clean
+.PHONY: all clean run
 
 run: mync
 	./$^

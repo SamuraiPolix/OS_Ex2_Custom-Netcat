@@ -15,6 +15,8 @@ GCOV_OUTPUTS = gcov_outputs
 
 all: ttt
 
+.PHONY: all clean run
+
 run: ttt
 	./$^
 

@@ -10,7 +10,7 @@ OBJECTS=$(subst .c,.o,$(SOURCES))
 
 all: mync
 
-.PHONY: all clean
+.PHONY: all clean run
 
 run: mync
 	./$^
