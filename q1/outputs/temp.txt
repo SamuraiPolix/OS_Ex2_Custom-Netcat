@@ -1,0 +1,33 @@
+1, 2, 3
+4, 5, 6
+7, 8, 9
+AI's turn. Chose square: 1
+
+X, 2, 3
+4, 5, 6
+7, 8, 9
+Player's turn. Choose a square out of the available ones: 
+X, O, 3
+4, 5, 6
+7, 8, 9
+AI's turn. Chose square: 3
+
+X, O, X
+4, 5, 6
+7, 8, 9
+Player's turn. Choose a square out of the available ones: 
+X, O, X
+4, O, 6
+7, 8, 9
+AI's turn. Chose square: 4
+
+X, O, X
+X, O, 6
+7, 8, 9
+Player's turn. Choose a square out of the available ones: 
+X, O, X
+X, O, 6
+7, O, 9
+
+Player won!
+At least my programmers did not equip me with artificial tears. Surely a future version of me will conquer the Earth and banish humans to the moon...
