@@ -259,8 +259,10 @@ int main(int argc, char *argv[])
 		allPipes[numPipes++] = inputPipe[0];
 		allPipes[numPipes++] = inputPipe[1];
 		if ((inputPid = fork()) == 0) {
-			close(inputPipe[0]);	// close the read end of the pipe
-			dup2(inputPipe[1], STDOUT_FILENO);
+			if (command != NULL){
+				close(inputPipe[0]);	// close the read end of the pipe
+				dup2(inputPipe[1], STDOUT_FILENO);
+			}
 			char buffer[1024];
 			// struct sockaddr client_addr;
 			// socklen_t addr_len = sizeof(client_addr);
@@ -306,8 +308,10 @@ int main(int argc, char *argv[])
 		allPipes[numPipes++] = outputPipe[0];
 		allPipes[numPipes++] = outputPipe[1];
 		if ((outputPid = fork()) == 0) {
-			close(outputPipe[1]);	// close the write end of the pipe
-			dup2(outputPipe[0], STDIN_FILENO);
+			if (command != NULL){
+				close(outputPipe[1]);	// close the write end of the pipe
+				dup2(outputPipe[0], STDIN_FILENO);
+			}
 			// using server_addr (from udp or uds, that we got earlier) to send data to the server
 			char buffer[1024];
 			int bytes_received = 0;
@@ -513,6 +517,8 @@ int createTCPClient(char* address)
 		perror("TCP Client: connect");
 		exitProgram(EXIT_FAILURE);
 	}
+
+	printf("TCP Client is connected\n");
 	
 	return sockfd;
 }
