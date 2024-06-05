@@ -11,20 +11,27 @@
             ]
         },
         {
-            "cwd": "/home/sam/Desktop/git/Operating-Systems/Operating-Systems-Ex2/q4",
-            "binaryPath": "/home/sam/Desktop/git/Operating-Systems/Operating-Systems-Ex2/q4/mync",
+            "cwd": "/home/sam/Desktop/git/Operating-Systems/Operating-Systems-Ex2/q6",
+            "binaryPath": "/home/sam/Desktop/git/Operating-Systems/Operating-Systems-Ex2/q6/mync",
             "binaryArgs": [
                 "-e",
                 "../q1/ttt 123456789",
                 "-o",
-                "UDPClocalhost,5067"
+                "UDSCDuds/socket6"
             ]
+        },
+        {
+            "cwd": "/home/sam/Desktop/git/Operating-Systems/Operating-Systems-Ex2/q6",
+            "binaryPath": "/home/sam/Desktop/git/Operating-Systems/Operating-Systems-Ex2/q6/mync",
+            "binaryArgs": []
         }
     ],
     "files.associations": {
         "wait.h": "c",
         "iostream": "cpp",
         "limits": "cpp",
-        "*.tcc": "cpp"
+        "*.tcc": "cpp",
+        "system_error": "c",
+        "types.h": "c"
     }
 }
