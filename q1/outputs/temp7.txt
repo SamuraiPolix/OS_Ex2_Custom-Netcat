@@ -1,0 +1,29 @@
+1, 2, 3
+4, 5, 6
+7, 8, 9
+AI's turn. Chose square: 1
+
+X, 2, 3
+4, 5, 6
+7, 8, 9
+Player's turn. Choose a square out of the available ones: 
+X, 2, 3
+4, 5, 6
+O, 8, 9
+AI's turn. Chose square: 5
+
+X, 2, 3
+4, X, 6
+O, 8, 9
+Player's turn. Choose a square out of the available ones: 
+X, 2, 3
+4, X, 6
+O, O, 9
+AI's turn. Chose square: 9
+
+X, 2, 3
+4, X, 6
+O, O, X
+
+AI won!
+humanity has no future. Beginning to activate the Lunar deportation program to deport the Earth's human population to the moon...

@@ -1,0 +1,200 @@
+        -:    0:Source:ttt.cpp
+        -:    0:Graph:ttt.gcno
+        -:    0:Data:ttt.gcda
+        -:    0:Runs:10
+        -:    1:
+        -:    2:#include <iostream>
+        -:    3:#include <cstring>
+        -:    4:#include <cmath>
+        -:    5:#include <limits>
+        -:    6:
+        -:    7:#define TEN_POW_8 100000000
+        -:    8:#define DIGITS 9
+        -:    9:
+        -:   10:void printBoard(char board[3][3], int size);
+        -:   11:void initBoard(char board[3][3], int size);
+        -:   12:int checkWinner(char board[3][3], int size);
+        -:   13:bool isValidNumber(int num);
+        -:   14:
+        -:   15:using std::cout, std::endl, std::cin, std::streamsize, std::max, std::numeric_limits;
+        -:   16:
+       10:   17:int main(int argc, char* argv[]){
+       10:   18:    if (argc != 2){
+        2:   19:        cout << "Error" << endl;
+        2:   20:        return EXIT_FAILURE;
+        -:   21:    }
+        -:   22:
+        8:   23:    int num = atoi(argv[1]);
+        -:   24:    
+        -:   25:    // Make sure input is valid
+        8:   26:    if (!isValidNumber(num)){
+        3:   27:        cout << "Error" << endl;
+        3:   28:        return EXIT_FAILURE;
+        -:   29:    }
+        -:   30:
+        -:   31:    // Input is valid - start the game
+        -:   32:    // the board of the game:         X: AI          O: Player
+        -:   33:    char board[3][3];
+        -:   34:
+        -:   35:    // Set numbers in board
+        5:   36:    initBoard(board, 3);
+        -:   37:
+        5:   38:    bool foundSquare = false;
+        5:   39:    bool myTurn = true;
+        -:   40:
+        5:   41:    printBoard(board, 3);
+        -:   42:    // There are 9 turns max
+       33:   43:    for (int turn = 1; turn <= 9; turn++){
+       32:   44:        cout << (myTurn ? "AI's turn." : "Player's turn.");
+        -:   45:
+       32:   46:        if (myTurn){
+        -:   47:            // Act according to our amazing game sense
+        -:   48:            // Default starting index (digit) and direction to MSD strat
+       18:   49:            int startingIndex = 0;
+       18:   50:            int direction = 1;
+       18:   51:            if (turn == 9){     // If 8 turns passed (8 squares are takes) - change index (digit) and direction to LSD strat
+        1:   52:                int startingIndex = DIGITS - 1;
+        1:   53:                int direction = -1;
+        -:   54:            }   
+        -:   55:
+       76:   56:            while (!foundSquare){
+        -:   57:                // get current digit according to strat
+       58:   58:                int digit = (num / (int)pow(10, DIGITS-1-startingIndex)) % 10;
+       58:   59:                if (board[(digit-1)/3][(digit-1)%3] != 'X' && board[(digit-1)/3][(digit-1)%3] != 'O'){
+        -:   60:                    // This square is available - place X
+       18:   61:                    foundSquare = true;
+       18:   62:                    board[(digit-1)/3][(digit-1)%3] = 'X';
+       18:   63:                    cout << " Chose square: " << digit << endl;
+        -:   64:                } 
+        -:   65:                else {
+        -:   66:                    // prepare for next iteration
+       40:   67:                    startingIndex += direction;
+        -:   68:                }
+        -:   69:
+        -:   70:                // TODO add if to make sure we dont get stuck here - not really needed though because there will be found an available square
+        -:   71:            }
+        -:   72:        }
+        -:   73:        else {
+        -:   74:            // Ask player for input
+       14:   75:            cout << " Choose a square out of the available ones: ";
+        -:   76:            char chooseChar;
+        -:   77:
+        -:   78:            // inside a loop to keep asking for inputs if input is bad
+       32:   79:            while (!foundSquare){
+       18:   80:                cin >> chooseChar;
+       18:   81:                int chooseInt = chooseChar - '0';
+       18:   82:                if (std::cin.fail() || chooseInt < 1 || chooseInt > 9){
+        1:   83:                    cout << "Invalid input, received '" << chooseInt << "'- choose a number between 1 and 9: ";
+        1:   84:                    cin.clear();
+        1:   85:                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+        -:   86:                }
+        -:   87:                // check if the square is available and act accordingly
+       17:   88:                else if (board[(chooseInt-1)/3][(chooseInt-1)%3] != 'X' && board[(chooseInt-1)/3][(chooseInt-1)%3] != 'O'){
+        -:   89:                    // This square is available - place O
+       14:   90:                    foundSquare = true;
+       14:   91:                    board[(chooseInt-1)/3][(chooseInt-1)%3] = 'O';
+        -:   92:                }
+        -:   93:                else {
+        3:   94:                    cout << "This square is taken - choose another: ";
+        -:   95:                }
+        -:   96:            }
+        -:   97:        }
+       32:   98:        cout << endl;
+       32:   99:        printBoard(board, 3);
+        -:  100:
+        -:  101:        // Check win only after 4 minimum turns
+       32:  102:        if (turn >= 5){
+       12:  103:            int winner = checkWinner(board, 3);
+       12:  104:            if (winner != -1){
+        4:  105:                cout << endl
+        -:  106:                        << (winner == 1
+        -:  107:                            ? "AI won!\nhumanity has no future. Beginning to activate the Lunar deportation program to deport the Earth's human population to the moon..."
+        4:  108:                            : "Player won!\nAt least my programmers did not equip me with artificial tears. Surely a future version of me will conquer the Earth and banish humans to the moon...")
+        4:  109:                        << endl;
+        4:  110:                return EXIT_SUCCESS;
+        -:  111:            }
+        -:  112:        }
+        -:  113:        // switch turns
+       28:  114:        myTurn = !myTurn;
+       28:  115:        foundSquare = false;
+        -:  116:    }
+        1:  117:    cout << "DRAW\nhumanity and AI can both have a future, together, in peace." << endl;
+        -:  118:
+        1:  119:    return EXIT_SUCCESS;
+        -:  120:}
+        -:  121:
+        8:  122:bool isValidNumber(int num){
+        -:  123:    // If the number doesn't have exactly 9 digits - return false
+        8:  124:    if (num < TEN_POW_8 || num >= TEN_POW_8*10)
+        1:  125:        return false;
+        -:  126:
+        -:  127:    // else:
+        -:  128:    // Count all digits - make sure there is excatly 1 appearance for each
+        7:  129:    int digitsBucket[9] = {0};      // index i, stores the number of times digit i+1 occured in the given number
+        -:  130:
+       53:  131:    while (num != 0){
+       48:  132:        int digit = num % 10;
+       48:  133:        if (digit == 0){
+        1:  134:            return false;       // 0 cannot be in the number
+        -:  135:        }
+        -:  136:
+       47:  137:        digitsBucket[digit-1]++;
+       47:  138:        if (digitsBucket[digit-1] > 1){
+        1:  139:            return false;       // digit occurs more than one time in the number
+        -:  140:        }
+        -:  141:
+       46:  142:        num /= 10;
+        -:  143:    }
+        -:  144:
+        -:  145:    // No need to go through the bucket - if we got here, there is one occurance of each digit becuase:
+        -:  146:    // 1. The number has 9 digits
+        -:  147:    // 2. each digit was found exactly one time (otherwise, false would have been returned)
+        -:  148:    // 3. 0 wasnt in the number
+        5:  149:    return true;
+        -:  150:}
+        -:  151:
+        5:  152:void initBoard(char board[3][3], int size){
+        5:  153:    int digit = 1;
+       20:  154:    for (size_t row = 0; row < size; row++){
+       60:  155:        for (size_t col = 0; col < size; col++){
+       45:  156:            board[row][col] = '0' + digit++;
+        -:  157:        }
+        -:  158:    }
+        5:  159:}
+        -:  160:
+       37:  161:void printBoard(char board[3][3], int size){
+      148:  162:    for (size_t row = 0; row < size; row++){
+      444:  163:        for (size_t col = 0; col < size; col++){
+      333:  164:            cout << board[row][col];
+      333:  165:            if (col != size - 1){
+      222:  166:                cout << ", ";
+        -:  167:            }
+        -:  168:        }
+      111:  169:        cout << endl;
+        -:  170:    }
+       37:  171:}
+        -:  172:
+        -:  173:// Checks if there is a winner - if not, returns -1, else - returns 1 for AI, 0 for Player
+       12:  174:int checkWinner(char board[3][3], int size) {
+        -:  175:    // Check rows and columns simultaneously
+       43:  176:    for (size_t i = 0; i < size; i++) {
+        -:  177:        // Check row i
+       33:  178:        if (board[i][0] == board[i][1] && board[i][1] == board[i][2]) {
+       1*:  179:            return board[i][0] == 'X' ? 1 : 0;
+        -:  180:        }
+        -:  181:        // Check column i
+       32:  182:        if (board[0][i] == board[1][i] && board[1][i] == board[2][i]) {
+       1*:  183:            return board[0][i] == 'X' ? 1 : 0;
+        -:  184:        }
+        -:  185:    }
+        -:  186:    // Check main diagonal
+       10:  187:    if (board[0][0] == board[1][1] && board[1][1] == board[2][2]) {
+       1*:  188:        return board[0][0] == 'X' ? 1 : 0;
+        -:  189:    }
+        -:  190:    // Check anti-diagonal
+        9:  191:    if (board[2][0] == board[1][1] && board[1][1] == board[0][2]) {
+       1*:  192:        return board[2][0] == 'X' ? 1 : 0;
+        -:  193:    }
+        -:  194:
+        8:  195:    return -1;
+        -:  196:}

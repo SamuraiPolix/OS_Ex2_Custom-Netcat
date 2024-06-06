@@ -1,0 +1,46 @@
+1, 2, 3
+4, 5, 6
+7, 8, 9
+AI's turn. Chose square: 1
+
+X, 2, 3
+4, 5, 6
+7, 8, 9
+Player's turn. Choose a square out of the available ones: 
+X, O, 3
+4, 5, 6
+7, 8, 9
+AI's turn. Chose square: 3
+
+X, O, X
+4, 5, 6
+7, 8, 9
+Player's turn. Choose a square out of the available ones: 
+X, O, X
+4, O, 6
+7, 8, 9
+AI's turn. Chose square: 4
+
+X, O, X
+X, O, 6
+7, 8, 9
+Player's turn. Choose a square out of the available ones: 
+X, O, X
+X, O, 6
+O, 8, 9
+AI's turn. Chose square: 6
+
+X, O, X
+X, O, X
+O, 8, 9
+Player's turn. Choose a square out of the available ones: 
+X, O, X
+X, O, X
+O, 8, O
+AI's turn. Chose square: 8
+
+X, O, X
+X, O, X
+O, X, O
+DRAW
+humanity and AI can both have a future, together, in peace.

@@ -48,7 +48,7 @@ int main(int argc, char* argv[]){
             // Default starting index (digit) and direction to MSD strat
             int startingIndex = 0;
             int direction = 1;
-            if (turn == 8){     // If 8 turns passed (8 squares are takes) - change index (digit) and direction to LSD strat
+            if (turn == 9){     // If 8 turns passed (8 squares are takes) - change index (digit) and direction to LSD strat
                 int startingIndex = DIGITS - 1;
                 int direction = -1;
             }   

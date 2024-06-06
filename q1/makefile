@@ -26,13 +26,17 @@ ttt: ttt.o
 coverage: 
 	$(CC) $(GCOV) -o ttt $(SOURCES)
 
-	./ttt < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp.txt || true
-	./ttt 123456788 < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp.txt || true
-	./ttt 123456789 sa < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp.txt || true
-	./ttt 12345679 < $(INPUTS_FOLDER)/draw.txt > $(OUTPUTS_FOLDER)/temp3.txt || true
-	./ttt 123456789 < $(INPUTS_FOLDER)/ai_win.txt > $(OUTPUTS_FOLDER)/temp.txt || true
-	./ttt 123456789 < $(INPUTS_FOLDER)/player_win.txt > $(OUTPUTS_FOLDER)/temp.txt || true
-	./ttt 123456789 < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp2.txt || true
+	./ttt < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp1.txt || true
+	./ttt 123456788 < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp2.txt || true
+	./ttt 12345678 < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp2.txt || true
+	./ttt 123456780 < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp2.txt || true
+	./ttt 123456789 sa < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp3.txt || true
+	./ttt 123456789 < $(INPUTS_FOLDER)/draw.txt > $(OUTPUTS_FOLDER)/temp4.txt || true
+	./ttt 123456789 < $(INPUTS_FOLDER)/ai_win.txt > $(OUTPUTS_FOLDER)/temp5.txt || true
+	./ttt 123456789 < $(INPUTS_FOLDER)/player_win.txt > $(OUTPUTS_FOLDER)/temp6.txt || true
+	./ttt 123456789 < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp7.txt || true
+	./ttt 159234678 < $(INPUTS_FOLDER)/ai_win.txt > $(OUTPUTS_FOLDER)/temp7.txt || true
+
 	gcov ttt.cpp
 
 tidy:
