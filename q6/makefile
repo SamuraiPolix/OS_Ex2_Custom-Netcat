@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -g
 VALGRIND_FLAGS = -v --leak-check=full --show-leak-kinds=all  --error-exitcode=99
-GCOV = -fprofile-arcs -ftest-coverage -coverage -lgcov
+GCOV = -fprofile-arcs -ftest-coverage -coverage
 
 SOURCES = mync.c
 CODE_SOURCES = mync.c

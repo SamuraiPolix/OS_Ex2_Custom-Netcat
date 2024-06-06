@@ -1,4 +1,14 @@
-// THIS IS BUILT ON Q3 - we added UDP support
+/*
+ * This includes implementations for questions 3, 3.5 and 4!
+ * Q3 - TCP Support for prog exec
+ * Q3.5 - TCP Support for chat between terminals (no -e)
+ * Q4 - UDP Support for prog exec (and chat between terminals)
+ * Q6 - UDS Support for prog exec (and chat between terminals)
+ * See usage command at the beginning of the main function for more information.
+
+ * Example runs can be found here:
+ * https://youtu.be/0bsxJbdX9is?si=Sffvorl8VAYiWAUQ
+*/
 
 #include <stdio.h>
 #include <string.h>
@@ -8,19 +18,15 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+// #include <netinet/in.h>
+// #include <arpa/inet.h>
 #include <netdb.h>			// getaddrinfo()
 #include <sys/wait.h>		// waitpid()
 #include <signal.h>			// alarm()
 #include <sys/un.h>			// Unix Domain Sockets
-#include <sys/stat.h> 	// chmod()
+// #include <sys/stat.h> 	// chmod()
 
-#define SERVERPORT "4950"	// the port users will be connecting to
-#define MYPORT "5050"
-#define DESTADDR "127.0.0.1"
 #define MAX_CLIENTS 10
-int numbytes=101;
 
 // Declare functions:
 int runProgram(char argv[]);
