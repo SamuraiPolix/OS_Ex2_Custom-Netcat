@@ -1,4 +1,5 @@
-# Exercise 2: Operating Systems for Computer Science - A Type of Netcat
+# A custom-made version of Netcat
+***Ex2 in Operating Systems @ Ariel University***
 
 ### Overview
 
