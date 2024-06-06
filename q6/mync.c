@@ -36,6 +36,7 @@ int createTCPServer(char* port);
 int createUDPClient(char* address, struct sockaddr_in* server_addr_udp);
 int createUDPServer(char* port);
 void handle_alarm(int sig);
+void handle_term(int sig);
 
 // UDS - Unix Domain Sockets (Stream and Datagram)
 // DATAGRAM
@@ -52,7 +53,7 @@ int numSockets = 0;
 
 // Store all paths in an array to be able to unlink them all at the end
 #define MAX_UDS 2
-char *allPaths[MAX_UDS] = {NULL, NULL};		// max 2 servers = 2 paths
+const char *allPaths[MAX_UDS] = {NULL, NULL};		// max 2 servers = 2 paths
 int numPaths = 0;
 
 // Store all pipes in an array to be able to close them all at the end
@@ -111,6 +112,10 @@ int main(int argc, char *argv[])
 			// set timeout for udp
 			i++;	// skip -t
 			timeout = atoi(argv[i]);
+			struct sigaction action;
+			memset(&action, 0, sizeof(action));
+			action.sa_handler = handle_term;
+			sigaction(SIGTERM, &action, NULL);		// 
 			signal(SIGALRM, handle_alarm);	// set alarm handler
 		}
 		// -------------- '-i' --------------
@@ -337,8 +342,6 @@ int main(int argc, char *argv[])
 					exitProgram(EXIT_FAILURE);
 				}
 				buffer[bytes_received] = '\0';
-				if (bytes_received > sizeof(buffer))
-					printf("WARNING!");
 				// send data to the server
 				if (isDatagram == 1){
 					// generic for both UDP and UDS
@@ -397,7 +400,6 @@ int main(int argc, char *argv[])
 				fflush(stdout);
 			}
 		}
-		exitProgram(EXIT_SUCCESS);
 	}
 	else if (execPid < 0) {		// forking failed
 		perror("fork: program exec process.");
@@ -827,7 +829,11 @@ int createUDSCS(const char *path){
 
 void handle_alarm(int sig) {
 	printf("Timeout reached. Exiting all processes!\n");
-	kill(0, SIGTERM); // Send SIGTERM signal to the process group
+	kill(0, SIGTERM); // Send SIGTERM signal to the process group - kill all processes
+}
+
+void handle_term(int sig) {
+	printf("SIGTERM received (Timeout reached). Closing all sockets and exiting!\n");
 	exitProgram(EXIT_SUCCESS);
 }
 
@@ -852,5 +858,6 @@ int exitProgram(int status) {
 			unlink(allPaths[i]);
 		}
 	}
+	
 	exit(status);
 }

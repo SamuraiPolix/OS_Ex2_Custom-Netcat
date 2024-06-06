@@ -1,0 +1,870 @@
+        -:    0:Source:mync.c
+        -:    0:Graph:mync.gcno
+        -:    0:Data:mync.gcda
+        -:    0:Runs:52
+        -:    1:// THIS IS BUILT ON Q3 - we added UDP support
+        -:    2:
+        -:    3:#include <stdio.h>
+        -:    4:#include <string.h>
+        -:    5:#include <stdlib.h>
+        -:    6:#include <unistd.h>
+        -:    7:#include <errno.h>
+        -:    8:#include <string.h>
+        -:    9:#include <sys/types.h>
+        -:   10:#include <sys/socket.h>
+        -:   11:#include <netinet/in.h>
+        -:   12:#include <arpa/inet.h>
+        -:   13:#include <netdb.h>			// getaddrinfo()
+        -:   14:#include <sys/wait.h>		// waitpid()
+        -:   15:#include <signal.h>			// alarm()
+        -:   16:#include <sys/un.h>			// Unix Domain Sockets
+        -:   17:#include <sys/stat.h> 	// chmod()
+        -:   18:
+        -:   19:#define SERVERPORT "4950"	// the port users will be connecting to
+        -:   20:#define MYPORT "5050"
+        -:   21:#define DESTADDR "127.0.0.1"
+        -:   22:#define MAX_CLIENTS 10
+        -:   23:int numbytes=101;
+        -:   24:
+        -:   25:// Declare functions:
+        -:   26:int runProgram(char argv[]);
+        -:   27:int exitProgram(int status);
+        -:   28:
+        -:   29:void *get_in_addr(struct sockaddr *sa);
+        -:   30:
+        -:   31:// TCP
+        -:   32:int createTCPClient(char* address);
+        -:   33:int createTCPServer(char* port);
+        -:   34:
+        -:   35:// UDP
+        -:   36:int createUDPClient(char* address, struct sockaddr_in* server_addr_udp);
+        -:   37:int createUDPServer(char* port);
+        -:   38:void handle_alarm(int sig);
+        -:   39:void handle_term(int sig);
+        -:   40:
+        -:   41:// UDS - Unix Domain Sockets (Stream and Datagram)
+        -:   42:// DATAGRAM
+        -:   43:int createUDSSD(const char *path);
+        -:   44:int createUDSCD(const char *path, struct sockaddr_un* server_addr_uds);
+        -:   45:// STREAM
+        -:   46:int createUDSSS(const char *path);
+        -:   47:int createUDSCS(const char *path);
+        -:   48:
+        -:   49:// Store all sockets in an array to be able to close them all at the end
+        -:   50:#define MAX_SOCKETS 4		// maximum is 2 servers (each has 2 sockets - client and server)
+        -:   51:int allSockets[MAX_SOCKETS] = {-1, -1, -1, -1};
+        -:   52:int numSockets = 0;
+        -:   53:
+        -:   54:// Store all paths in an array to be able to unlink them all at the end
+        -:   55:#define MAX_UDS 2
+        -:   56:const char *allPaths[MAX_UDS] = {NULL, NULL};		// max 2 servers = 2 paths
+        -:   57:int numPaths = 0;
+        -:   58:
+        -:   59:// Store all pipes in an array to be able to close them all at the end
+        -:   60:#define MAX_PIPES 4
+        -:   61:int allPipes[MAX_PIPES] = {-1, -1, -1, -1};		// max 4 pipes = 2 for input and 2 for output
+        -:   62:int numPipes = 0;
+        -:   63:
+        -:   64:
+       31:   65:int main(int argc, char *argv[])
+        -:   66:{
+       31:   67:	if (argc < 3) {
+        1:   68:		printf("usage: ./mync\n"
+        -:   69:				"Optional:\n"
+        -:   70:				"-e <program arguments>: run a program with arguments\n"
+        -:   71:				"-i <parameter>: take input from opened parameter\n"
+        -:   72:				"-o <parameter>: send output to opened parameter\n"
+        -:   73:				"-b <parameter>: send output and input to opened parameter\n"
+        -:   74:				"-t <timeout>: set timeout for UDP connection. defaults to 0\n\n"
+        -:   75:				"Parameters:\n"
+        -:   76:				"TCPS<PORT>: open a TCP server on port PORT\n"
+        -:   77:				"TCPC<IP,PORT> / TCPC<hostname,port>: open a TCP client and connect to IP on port PORT\n"
+        -:   78:				"UDPS<PORT>: open a UDP server on port PORT\n"
+        -:   79:				"UDPC<IP,PORT> / UDPC<hostname,port>: open a UDP client and connect to IP on port PORT\n"
+        -:   80:				"UDSSD<path>: open a Unix Domain Sockets Datagram server on path\n"
+        -:   81:				"UDSCD<path>: open a Unix Domain Sockets Datagram client and connect to path\n"
+        -:   82:				"UDSSS<path>: open a Unix Domain Sockets Stream server on path\n"
+        -:   83:				"UDSCS<path>: open a Unix Domain Sockets Stream client and connect to path\n"
+        -:   84:				);
+        1:   85:		exitProgram(EXIT_FAILURE);
+        -:   86:	}
+       30:   87:	char *command = NULL;
+        -:   88:	// store sockets (if arguments are given for them [-i will store a sockid into inputSocket, -o will store a sockid into outputSocket])
+       30:   89:	int inputSocket = -1;
+       30:   90:	int outputSocket = -1;
+        -:   91:	// UDP
+       30:   92:	int isDatagram = 0;		// datagram uses sendto and recvfrom, stream uses send and recv
+       30:   93:	size_t timeout = 0;		// timeout for UDP
+        -:   94:	// UDS + UDP
+        -:   95:	struct sockaddr server_addr;		// generic for both UDP and UDS (_in and _un)
+        -:   96:
+       30:   97:	memset(&server_addr, 0, sizeof(server_addr));
+        -:   98:
+        -:   99:	// skiping the first because its the name of this program
+       80:  100:	for (int i = 1; i<argc; i++) {
+       62:  101:		if (strcmp(argv[i], "-e") == 0) {
+        -:  102:			// run a program with arguments
+       30:  103:			i++;	// skip -e
+       30:  104:			char *p = argv[i];		// run with a pointer to get until the end of the arguments (next '-' flag or end of line)
+      600:  105:			while (*(p+1) != '-' && *p != '\0') {
+      570:  106:				p++;
+        -:  107:			}
+       30:  108:			*p = '\0';	// null-terminate the arguments
+       30:  109:			command = argv[i];	// save a pointer to the command for later run (after we go over all the argvs here)
+        -:  110:		}
+       62:  111:		if (strcmp(argv[i], "-t") == 0) {
+        -:  112:			// set timeout for udp
+        2:  113:			i++;	// skip -t
+        2:  114:			timeout = atoi(argv[i]);
+        -:  115:			struct sigaction action;
+        2:  116:			memset(&action, 0, sizeof(action));
+        2:  117:			action.sa_handler = handle_term;
+        2:  118:			sigaction(SIGTERM, &action, NULL);		// 
+        2:  119:			signal(SIGALRM, handle_alarm);	// set alarm handler
+        -:  120:		}
+        -:  121:		// -------------- '-i' --------------
+       60:  122:		else if (strcmp(argv[i], "-i") == 0) {
+        -:  123:			// take input from opened socket
+       12:  124:			i++;
+        -:  125:			// -------------- TCP --------------
+       12:  126:			if (strncmp(argv[i], "TCPS", 4) == 0) {
+        -:  127:				// Open a server and listen on it
+        3:  128:				inputSocket = createTCPServer(argv[i]+4);
+        -:  129:			}
+        9:  130:			else if (strncmp(argv[i], "TCPC", 4) == 0) {
+        -:  131:				// open a client and listen on it
+        1:  132:				inputSocket = createTCPClient(argv[i]+4);
+        -:  133:			}
+        -:  134:			// -------------- UDP --------------
+        -:  135:			// Input needs to support UDP server only (not client)
+        8:  136:			else if (strncmp(argv[i], "UDPS", 4) == 0) {
+        -:  137:				// Open a server and listen on it
+        3:  138:				inputSocket = createUDPServer(argv[i]+4);
+        3:  139:				isDatagram = 1;
+        -:  140:			}
+        5:  141:			else if (strncmp(argv[i], "UDPC", 4) == 0) {
+        1:  142:				fprintf(stderr, "UDP Client doesn't support -i\n");
+        1:  143:				exitProgram(EXIT_FAILURE);
+        -:  144:			}
+        -:  145:			// -------------- UDS --------------
+        4:  146:			else if (strncmp(argv[i], "UDSSD", 5) == 0) {
+        1:  147:				inputSocket = createUDSSD(argv[i]+5);
+        1:  148:				isDatagram = 1;
+        -:  149:			}
+        3:  150:			else if (strncmp(argv[i], "UDSCD", 5) == 0) {
+        1:  151:				fprintf(stderr, "UDS Datagram Client doesn't support -i\n");
+        1:  152:				exitProgram(EXIT_FAILURE);
+        -:  153:			}
+        2:  154:			else if (strncmp(argv[i], "UDSSS", 5) == 0) {
+        1:  155:				inputSocket = createUDSSS(argv[i]+5);
+        -:  156:				// isDatagram = 1;
+        -:  157:			}
+        1:  158:			else if (strncmp(argv[i], "UDSCS", 5) == 0) {
+        -:  159:				// Open a server and listen on it
+        1:  160:				inputSocket = createUDSCS(argv[i]+5);
+        -:  161:				// isDatagram = 1;
+        -:  162:			}
+        -:  163:		}
+        -:  164:		// -------------- '-o' --------------
+       48:  165:		else if (strcmp(argv[i], "-o") == 0) {
+        -:  166:			// send output to opened socket
+        9:  167:			i++;
+        -:  168:			// -------------- TCP --------------
+        9:  169:			if (strncmp(argv[i], "TCPS", 4) == 0) {
+        -:  170:				// Open a server and talk on it
+        2:  171:				outputSocket = createTCPServer(argv[i]+4);
+        -:  172:			}
+        7:  173:			else if (strncmp(argv[i], "TCPC", 4) == 0) {
+        -:  174:				// Open a server and talk on it
+        1:  175:				outputSocket = createTCPClient(argv[i]+4);
+        -:  176:			}
+        -:  177:			// -------------- UDP --------------
+        -:  178:			// Output needs to support UDP client only (not server)
+        6:  179:			else if (strncmp(argv[i], "UDPC", 4) == 0) {
+        -:  180:				// open a client and listen on it
+        1:  181:				outputSocket = createUDPClient(argv[i]+4, (struct sockaddr_in *)&server_addr);
+        1:  182:				isDatagram = 1;
+        -:  183:			}
+        5:  184:			else if (strncmp(argv[i], "UDPS", 4) == 0) {
+        1:  185:				fprintf(stderr, "UDP Server doesn't support -o\n");
+        1:  186:				exitProgram(EXIT_FAILURE);
+        -:  187:			}
+        -:  188:			// -------------- UDS --------------
+        4:  189:			else if (strncmp(argv[i], "UDSSD", 5) == 0) {
+        1:  190:				fprintf(stderr, "UDS Datagram Server doesn't support -o\n");
+        1:  191:				exitProgram(EXIT_FAILURE);
+        -:  192:			}
+        3:  193:			else if (strncmp(argv[i], "UDSCD", 5) == 0) {
+        -:  194:				// open a client and listen on it
+        1:  195:				outputSocket = createUDSCD(argv[i]+5, (struct sockaddr_un *)&server_addr);
+        1:  196:				isDatagram = 1;
+        -:  197:			}
+        2:  198:			else if (strncmp(argv[i], "UDSSS", 5) == 0) {
+        -:  199:				// Open a server and listen on it
+        1:  200:				outputSocket = createUDSSS(argv[i]+5);
+        -:  201:			}
+        1:  202:			else if (strncmp(argv[i], "UDSCS", 5) == 0) {
+        -:  203:				// Open a server and listen on it
+        1:  204:				outputSocket = createUDSCS(argv[i]+5);
+        -:  205:				// isDatagram = 1;
+        -:  206:			}
+        -:  207:		}
+        -:  208:		// -------------- '-b' --------------
+       39:  209:		else if (strcmp(argv[i], "-b") == 0) {
+        -:  210:			// send output and input to 2 opened sockets
+        9:  211:			i++;
+        -:  212:			// -------------- TCP --------------
+        9:  213:			if (strncmp(argv[i], "TCPS", 4) == 0) {
+        -:  214:				// Open a server, listen and talk on it
+        1:  215:				inputSocket = outputSocket = createTCPServer(argv[i]+4);
+        -:  216:			}
+        8:  217:			else if (strncmp(argv[i], "TCPC", 4) == 0) {
+        -:  218:				// Open a server and talk on it
+        1:  219:				inputSocket = outputSocket = createTCPClient(argv[i]+4);
+        -:  220:			}
+        -:  221:			// -------------- UDP --------------
+        -:  222:			// UDP doesn't support -b
+        7:  223:			else if (strncmp(argv[i], "UDPS", 4) == 0) {
+        1:  224:				fprintf(stderr, "UDP doesn't support -b\n");
+        1:  225:				exitProgram(EXIT_FAILURE);
+        -:  226:			}
+        6:  227:			else if (strncmp(argv[i], "UDPC", 4) == 0) {
+        1:  228:				fprintf(stderr, "UDP doesn't support -b\n");
+        1:  229:				exitProgram(EXIT_FAILURE);
+        -:  230:			}
+        -:  231:			// -------------- UDS --------------
+        5:  232:			else if (strncmp(argv[i], "UDSSD", 5) == 0) {
+        1:  233:				fprintf(stderr, "UDS Datagram Server doesn't support -b\n");
+        1:  234:				exitProgram(EXIT_FAILURE);
+        -:  235:			}
+        4:  236:			else if (strncmp(argv[i], "UDSCD", 5) == 0) {
+        2:  237:				fprintf(stderr, "UDS Datagram Client doesn't support -b\n");
+        2:  238:				exitProgram(EXIT_FAILURE);
+        -:  239:			}
+        2:  240:			else if (strncmp(argv[i], "UDSSS", 5) == 0) {
+        -:  241:				// Open a server and listen on it
+        1:  242:				outputSocket = inputSocket = createUDSSS(argv[i]+5);
+        -:  243:				// isDatagram = 1;
+        -:  244:			}
+        1:  245:			else if (strncmp(argv[i], "UDSCS", 5) == 0) {
+        -:  246:				// Open a server and listen on it
+        1:  247:				outputSocket = inputSocket = createUDSCS(argv[i]+5);
+        -:  248:				// isDatagram = 1;
+        -:  249:			}
+        -:  250:		}
+        -:  251:	}
+        -:  252:
+       18:  253:    pid_t inputPid = -1, outputPid = -1, execPid = -1;
+       18:  254:    int inputPipe[2] = {-1, -1};
+       18:  255:	int outputPipe[2] = {-1, -1};
+        -:  256:
+        -:  257:	/*
+        -:  258:	 * We need to run 3 things at the same time - input, output and the program itself/a chat between input and output
+        -:  259:	 * So we use 3 forks to run them in parallel and pipes between them to redirect input/output
+        -:  260:	 */
+        -:  261:
+        -:  262:	// Fork and handle -i (input redirection)	
+       18:  263:	if (inputSocket != -1) {
+        -:  264:		// store the socket in the array to be able to close it at the end
+       12:  265:		allSockets[numSockets++] = inputSocket;
+       12:  266:		if (pipe(inputPipe) == -1) {
+    #####:  267:			perror("pipe: input process.");
+    #####:  268:			exitProgram(EXIT_FAILURE);
+        -:  269:		}
+        -:  270:		// store the pipe in the array to be able to close it at the end
+       12:  271:		allPipes[numPipes++] = inputPipe[0];
+       12:  272:		allPipes[numPipes++] = inputPipe[1];
+       12:  273:		if ((inputPid = fork()) == 0) {
+        2:  274:			if (command != NULL){
+        2:  275:				close(inputPipe[0]);	// close the read end of the pipe
+        2:  276:				dup2(inputPipe[1], STDOUT_FILENO);
+        -:  277:			}
+        -:  278:			char buffer[1024];
+        -:  279:			// struct sockaddr client_addr;
+        -:  280:			// socklen_t addr_len = sizeof(client_addr);
+        2:  281:			while (1) {
+        -:  282:				// set alarm for timeout, only for datagram
+        4:  283:				if (isDatagram == 1 && timeout != 0){
+        4:  284:					alarm(timeout);
+        -:  285:				}
+        -:  286:				// int numbytes = recvfrom(inputSocket, buffer, sizeof(buffer) - 1, 0, (struct sockaddr *)&client_addr, &addr_len);
+        4:  287:				int numbytes = -1;
+        4:  288:				if (isDatagram == 1){
+        4:  289:					numbytes = recvfrom(inputSocket, buffer, sizeof(buffer) - 1, 0, NULL, NULL);
+        -:  290:				}
+        -:  291:				else{
+    #####:  292:					numbytes = recv(inputSocket, buffer, sizeof(buffer) - 1, 0);
+        -:  293:				}
+        2:  294:				alarm(0);	// cancel alarm - we received data
+        2:  295:				if (numbytes == -1) {
+    #####:  296:					perror("recvfrom/recv: input process.");
+    #####:  297:					exitProgram(EXIT_FAILURE);
+        -:  298:				}
+        2:  299:				buffer[numbytes] = '\0';
+        2:  300:				write(STDOUT_FILENO, buffer, numbytes);
+        -:  301:				// fflush(stdout);  // Ensure the buffer is flushed immediately
+        -:  302:			}
+        -:  303:		}
+       12:  304:		else if (inputPid < 0) {		// forking failed
+    #####:  305:			perror("fork: input process.");
+        -:  306:			// close sockets before exiting
+    #####:  307:			exitProgram(EXIT_FAILURE);
+        -:  308:		}
+        -:  309:	}
+        -:  310:
+        -:  311:	// Fork and handle -o (output redirection)	
+       18:  312:	if (outputSocket != -1) {	
+        -:  313:		// store the socket in the array to be able to close it at the end
+       10:  314:		allSockets[numSockets++] = outputSocket;
+       10:  315:		if (pipe(outputPipe) == -1) {
+    #####:  316:			perror("pipe: output process.");
+    #####:  317:			exitProgram(EXIT_FAILURE);
+        -:  318:		}
+        -:  319:		// store the pipe in the array to be able to close it at the end
+       10:  320:		allPipes[numPipes++] = outputPipe[0];
+       10:  321:		allPipes[numPipes++] = outputPipe[1];
+       10:  322:		if ((outputPid = fork()) == 0) {
+        1:  323:			if (command != NULL){
+        1:  324:				close(outputPipe[1]);	// close the write end of the pipe
+        1:  325:				dup2(outputPipe[0], STDIN_FILENO);
+        -:  326:			}
+        -:  327:			// using server_addr (from udp or uds, that we got earlier) to send data to the server
+        -:  328:			char buffer[1024];
+        1:  329:			int bytes_received = 0;
+        -:  330:			// keep reading from stdout until timeout from alarm
+        -:  331:			while (1)
+        -:  332:			{
+        -:  333:				// set alarm for timeout, only for datagram
+    27467:  334:				if (isDatagram == 1 && timeout != 0){
+    #####:  335:					alarm(timeout);
+        -:  336:				}
+    27467:  337:				bytes_received = read(STDIN_FILENO, buffer, sizeof(buffer) - 1);
+        -:  338:				// printf("buffer: %s\n", buffer);
+    27467:  339:				alarm(0);	// cancel alarm - we received data
+    27467:  340:				if (bytes_received < 0) {
+    #####:  341:					perror("read: output process.");
+    #####:  342:					exitProgram(EXIT_FAILURE);
+        -:  343:				}
+    27467:  344:				buffer[bytes_received] = '\0';
+    27467:  345:				if (bytes_received > sizeof(buffer))
+    #####:  346:					printf("WARNING!");
+        -:  347:				// send data to the server
+    27467:  348:				if (isDatagram == 1){
+        -:  349:					// generic for both UDP and UDS
+    27467:  350:					if (sendto(outputSocket, buffer, bytes_received, 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1){
+        1:  351:						perror("sendto: output process.");
+        1:  352:						exitProgram(EXIT_FAILURE);
+        -:  353:					}
+        -:  354:				}
+        -:  355:				else {
+    #####:  356:					if (send(outputSocket, buffer, bytes_received, 0) == -1){
+    #####:  357:						perror("send: output process.");
+    #####:  358:						exitProgram(EXIT_FAILURE);
+        -:  359:					}
+        -:  360:				}
+        -:  361:			}
+        -:  362:		}
+       10:  363:		else if (outputPid < 0) {		// forking failed
+    #####:  364:			perror("fork: output process.");
+        -:  365:			// close sockets before exiting
+    #####:  366:			exitProgram(EXIT_FAILURE);
+        -:  367:		}
+        -:  368:	}
+        -:  369:
+        -:  370:	// Fork and handle -e (program exec) or chat between input and output if -e is not given
+       18:  371:	if ((execPid = fork()) == 0) {
+       18:  372:		if (inputPipe[0] != -1) {
+       12:  373:			close(inputPipe[1]); 			// Close unused write end
+       12:  374:			dup2(inputPipe[0], STDIN_FILENO); 		// Redirect stdin to read end of the pipe
+        -:  375:		}
+       18:  376:		if (outputPipe[1] != -1) {
+       10:  377:			close(outputPipe[0]); 			// Close unused read end
+       10:  378:			dup2(outputPipe[1], STDOUT_FILENO); 	// Redirect stdout to write end of the pipe
+        -:  379:		}
+       18:  380:		if (command != NULL) {
+       18:  381:			runProgram(command);
+        -:  382:		}
+        -:  383:		else{
+        -:  384:			// read from stdin and write to stdout
+        -:  385:			char buffer[1024];
+    #####:  386:			int bytes_received = 0;
+        -:  387:			// keep reading from stdout until timeout from alarm
+        -:  388:			while (1)
+        -:  389:			{
+        -:  390:				// set alarm for timeout, only for datagram
+    #####:  391:				if (isDatagram == 1 && timeout != 0){
+    #####:  392:					alarm(timeout);
+        -:  393:				}
+    #####:  394:				bytes_received = read(STDIN_FILENO, buffer, sizeof(buffer) - 1);
+    #####:  395:				alarm(0);	// cancel alarm - we received data
+    #####:  396:				if (bytes_received < 0) {
+    #####:  397:					perror("read: output process.");
+    #####:  398:					exitProgram(EXIT_FAILURE);
+        -:  399:				}
+    #####:  400:				buffer[bytes_received] = '\0';
+    #####:  401:				write(STDOUT_FILENO, buffer, bytes_received);
+    #####:  402:				fflush(stdout);
+        -:  403:			}
+        -:  404:		}
+    #####:  405:		exitProgram(EXIT_SUCCESS);
+        -:  406:	}
+       18:  407:	else if (execPid < 0) {		// forking failed
+    #####:  408:		perror("fork: program exec process.");
+    #####:  409:		exitProgram(EXIT_FAILURE);
+        -:  410:	}
+        -:  411:	
+        -:  412:
+        -:  413:	// Parent process: wait for program exec to finish. 
+       18:  414:	if (execPid > 0) {
+        -:  415:		int status;
+        -:  416:		// printf("waiting for execPid: %d\n", execPid);
+       18:  417:		waitpid(execPid, &status, 0);
+       17:  418:		if (status != 0) {
+    #####:  419:			fprintf(stderr, "Exec process failed\n");
+        -:  420:		}
+        -:  421:	}
+        -:  422:
+        -:  423:	// close all sockets
+       17:  424:	return exitProgram(EXIT_SUCCESS);
+        -:  425:	
+        -:  426:	// return 0;
+        -:  427:}
+        -:  428:
+        -:  429:#define MAX_ARGS_SIZE 100
+       18:  430:int runProgram(char argv[]) {
+        -:  431:	// Code is taken from q2:
+       18:  432:	char *p = argv;  // a pointer used to extract the command and arguments from argv
+        -:  433:    char *args[MAX_ARGS_SIZE];      // store pointers to the command and arguments
+       18:  434:    int i = 0;      // index for args
+        -:  435:    
+        -:  436:    // skip leading spaces
+       18:  437:    while (*p == ' ') {
+    #####:  438:        p++;
+        -:  439:    }
+        -:  440:    
+        -:  441:    // we are at the start of the command to execute - place args[0] pointer here, increment i
+       18:  442:    args[i++] = p;
+        -:  443:    
+        -:  444:    // skip spaces and make sure we are not going off
+      180:  445:    while (*p != ' ' && *p != '\0') {
+      162:  446:        p++;
+        -:  447:    }
+        -:  448:
+       18:  449:    *p = '\0';  // null-terminate the program name
+        -:  450:
+       18:  451:    p++;    // move to the next character
+        -:  452:
+        -:  453:    // extract the arguments
+       36:  454:    while (*p != '\0') {
+        -:  455:        // skip leading spaces
+       18:  456:        while (*p == ' ') {
+    #####:  457:            p++;
+        -:  458:        }
+        -:  459:
+        -:  460:        // if we reach the end, break
+       18:  461:        if (*p == '\0') {
+    #####:  462:            break;
+        -:  463:        }
+        -:  464:
+        -:  465:        // p is now placed at the start of the argument - place args[i] pointer here, increment i
+       18:  466:        args[i++] = p;
+        -:  467:
+        -:  468:        // go until the end of the argument
+      180:  469:        while (*p != ' ' && *p != '\0') {
+      162:  470:            p++;
+        -:  471:        }
+        -:  472:
+       18:  473:        if (*p != '\0') {   // if we are not at the end
+    #####:  474:            *p = '\0';  // null-terminate the argument
+    #####:  475:            p++;    // move to the next character
+        -:  476:        }
+        -:  477:        // else, we are at the end of the command - the loop will break
+        -:  478:    }
+        -:  479:
+       18:  480:    args[i] = NULL; // null-terminate the arguments list, for execvp to work
+        -:  481:
+        -:  482:    // execute command
+       18:  483:    execvp(args[0], args);
+        -:  484:
+        -:  485:    // if execvp returns (this thread didnt die), there was an error
+       18:  486:    perror("execvp");
+        -:  487:
+    #####:  488:	return EXIT_SUCCESS;
+        -:  489:}
+        -:  490:
+        3:  491:int createTCPClient(char* address)
+        -:  492:{ 
+        -:  493:	// address is in the format of "IP,PORT", separate them
+        3:  494:	char* temp = address;
+       30:  495:	while (*temp != ',' && *temp != '\0') {
+       27:  496:		temp++;
+        -:  497:	}
+        3:  498:	if (*temp == '\0') {
+    #####:  499:		fprintf(stderr, "TCP Client: Invalid address.\n");
+    #####:  500:		exitProgram(EXIT_FAILURE);
+        -:  501:	}
+        3:  502:	*temp = '\0';
+        3:  503:	temp++;
+        3:  504:	char* serverPort = temp;
+        -:  505:
+        -:  506:	int sockfd;
+        -:  507:	struct addrinfo hints;
+        -:  508:	struct addrinfo *servinfo;
+        -:  509:	struct addrinfo *p;
+        -:  510:	int rv;
+        3:  511:	memset(&hints, 0, sizeof hints);
+        3:  512:	hints.ai_family = AF_INET; // set to AF_INET to use IPv4
+        3:  513:	hints.ai_socktype = SOCK_STREAM;		// TCP
+        -:  514:
+        3:  515:	if ((rv = getaddrinfo(address, serverPort, &hints, &servinfo)) != 0) {
+    #####:  516:		fprintf(stderr, "TCP Client: getaddrinfo: %s\n", gai_strerror(rv));
+    #####:  517:		return 1;
+        -:  518:	}
+        -:  519:
+       3*:  520:	for(p = servinfo; p != NULL; p = p->ai_next) {
+       3*:  521:		if ((sockfd = socket(p->ai_family, p->ai_socktype,
+        -:  522:				p->ai_protocol)) == -1) {
+    #####:  523:			perror("TCP Client: socket");
+    #####:  524:			continue;
+        -:  525:		}
+        3:  526:		break;
+        -:  527:	}
+        3:  528:	if (connect (sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+    #####:  529:		perror("TCP Client: connect");
+    #####:  530:		exitProgram(EXIT_FAILURE);
+        -:  531:	}
+        -:  532:
+        3:  533:	printf("TCP Client is connected\n");
+        -:  534:	
+        3:  535:	return sockfd;
+        -:  536:}
+        -:  537:
+        -:  538:// get sockaddr, IPv4 or IPv6:
+    #####:  539:void *get_in_addr(struct sockaddr *sa)
+        -:  540:{
+    #####:  541:	if (sa->sa_family == AF_INET) {
+    #####:  542:		return &(((struct sockaddr_in*)sa)->sin_addr);
+        -:  543:	}
+        -:  544:
+    #####:  545:	return &(((struct sockaddr_in6*)sa)->sin6_addr);
+        -:  546:}
+        -:  547:
+        6:  548:int createTCPServer(char* port)
+        -:  549:{
+        -:  550:	int sockfd;
+        -:  551:	struct addrinfo hints, *servinfo, *p;
+        -:  552:	int rv;
+        -:  553:
+        6:  554:	memset(&hints, 0, sizeof hints);
+        6:  555:	hints.ai_family = AF_INET; // set to AF_INET to use IPv4
+        6:  556:	hints.ai_socktype = SOCK_STREAM;
+        6:  557:	hints.ai_flags = AI_PASSIVE; // use my IP
+        -:  558:
+        6:  559:	if ((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0) {
+    #####:  560:		fprintf(stderr, "TCP Server: getaddrinfo: %s\n", gai_strerror(rv));
+    #####:  561:		exitProgram(EXIT_FAILURE);
+        -:  562:	}
+        -:  563:
+        -:  564:	// loop through all the results and bind to the first we can
+        9:  565:	for(p = servinfo; p != NULL; p = p->ai_next) {
+       6*:  566:		if ((sockfd = socket(p->ai_family, p->ai_socktype,
+        -:  567:				p->ai_protocol)) == -1) {
+    #####:  568:			perror("TCP Server: socket");
+    #####:  569:			continue;
+        -:  570:		}
+        -:  571:
+        6:  572:		if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+        3:  573:			close(sockfd);
+        3:  574:			perror("TCP Server: bind");
+        3:  575:			continue;
+        -:  576:		}
+        3:  577:		break;
+        -:  578:	}
+        6:  579:	if (p == NULL) {
+        3:  580:		fprintf(stderr, "TCP Server: failed to bind\n");
+        3:  581:		exitProgram(2);
+        -:  582:	}
+        -:  583:
+        3:  584:	freeaddrinfo(servinfo);
+        -:  585:
+        3:  586:    if (listen(sockfd, MAX_CLIENTS) == -1) {
+    #####:  587:		perror("TCP Server: listen");
+    #####:  588:		close(sockfd);
+    #####:  589:		exitProgram(EXIT_FAILURE);
+        -:  590:	}
+        -:  591:
+        3:  592:	printf("TCP Server: waiting to accept connection...\n");
+        -:  593:
+        -:  594:    struct sockaddr_in client_addr;
+        3:  595:    socklen_t client_len = sizeof(client_addr);
+        3:  596:    int client_sock = accept(sockfd, (struct sockaddr *) &client_addr, &client_len);
+        3:  597:    if (client_sock < 0) {
+    #####:  598:        perror("TCP Server: accept");
+    #####:  599:        close(sockfd);
+    #####:  600:        exitProgram(EXIT_FAILURE);
+        -:  601:    }
+        -:  602:
+        3:  603:    printf("TCP Server is up\n");
+        -:  604:
+        -:  605:	// store the server socket in the array to be able to close it at the end
+        3:  606:	allSockets[numSockets++] = sockfd;
+        -:  607:	
+        -:  608:
+        3:  609:    return client_sock;
+        -:  610:}
+        -:  611:
+        -:  612:// Returns the server_addr_udp in the pointer given
+        1:  613:int createUDPClient(char* address, struct sockaddr_in* server_addr_udp)
+        -:  614:{
+        1:  615:	memset(server_addr_udp, 0, sizeof *server_addr_udp);
+        -:  616:	// address is in the format of "IP,PORT", separate them
+        1:  617:	char* temp = address;
+       10:  618:	while (*temp != ',' && *temp != '\0') {
+        9:  619:		temp++;
+        -:  620:	}
+        1:  621:	if (*temp == '\0') {
+    #####:  622:		fprintf(stderr, "UDP Client: Invalid address.\n");
+    #####:  623:		exitProgram(EXIT_FAILURE);
+        -:  624:	}
+        1:  625:	*temp = '\0';
+        1:  626:	temp++;
+        1:  627:	char* serverPort = temp;
+        -:  628:
+        -:  629:	int sockfd;
+        -:  630:	struct addrinfo hints;
+        -:  631:	struct addrinfo *servinfo;
+        -:  632:	struct addrinfo *p;
+        -:  633:	int rv;
+        1:  634:	memset(&hints, 0, sizeof hints);
+        1:  635:	hints.ai_family = AF_INET; // set to AF_INET to use IPv4
+        1:  636:	hints.ai_socktype = SOCK_DGRAM;		// UDP
+        -:  637:
+        1:  638:	if ((rv = getaddrinfo(address, serverPort, &hints, &servinfo)) != 0) {
+    #####:  639:		fprintf(stderr, "UDP Client: getaddrinfo: %s\n", gai_strerror(rv));
+    #####:  640:		return 1;
+        -:  641:	}
+        -:  642:
+       1*:  643:	for(p = servinfo; p != NULL; p = p->ai_next) {
+       1*:  644:		if ((sockfd = socket(p->ai_family, p->ai_socktype,
+        -:  645:				p->ai_protocol)) == -1) {
+    #####:  646:			perror("UDP Client: socket");
+    #####:  647:			continue;
+        -:  648:		}
+        -:  649:
+        -:  650:		// copy address info to server_addr_udp for later use (sendto in main)
+        1:  651:        memcpy(server_addr_udp, p->ai_addr, sizeof(struct sockaddr_in));
+        -:  652:
+        1:  653:		break;
+        -:  654:	}
+        1:  655:	return sockfd;
+        -:  656:}
+        -:  657:
+        3:  658:int createUDPServer(char* port)
+        -:  659:{
+        -:  660:	int sockfd;
+        -:  661:	struct addrinfo hints, *servinfo, *p;
+        -:  662:	int rv;
+        -:  663:
+        3:  664:	memset(&hints, 0, sizeof hints);
+        3:  665:	hints.ai_family = AF_INET; // set to AF_INET to use IPv4
+        3:  666:	hints.ai_socktype = SOCK_DGRAM;
+        3:  667:	hints.ai_flags = AI_PASSIVE; // use my IP
+        -:  668:
+        3:  669:	if ((rv = getaddrinfo(NULL, port, &hints, &servinfo)) != 0) {
+    #####:  670:		fprintf(stderr, "UDP Server: getaddrinfo: %s\n", gai_strerror(rv));
+    #####:  671:		return 1;
+        -:  672:	}
+        -:  673:
+        -:  674:	// loop through all the results and bind to the first we can
+       3*:  675:	for(p = servinfo; p != NULL; p = p->ai_next) {
+       3*:  676:		if ((sockfd = socket(p->ai_family, p->ai_socktype,
+        -:  677:				p->ai_protocol)) == -1) {
+    #####:  678:			perror("UDP Server: socket");
+    #####:  679:			continue;
+        -:  680:		}
+        -:  681:
+       3*:  682:		if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+    #####:  683:			close(sockfd);
+    #####:  684:			perror("UDP Server: bind");
+    #####:  685:			continue;
+        -:  686:		}
+        3:  687:		break;
+        -:  688:	}
+        3:  689:	if (p == NULL) {
+    #####:  690:		fprintf(stderr, "UDP Server: failed to bind socket\n");
+    #####:  691:		exitProgram(2);
+        -:  692:	}
+        -:  693:
+        3:  694:	freeaddrinfo(servinfo);
+        -:  695:
+        3:  696:	return sockfd;
+        -:  697:}
+        -:  698:// Unix Domain Sockets Datagram Server
+        1:  699:int createUDSSD(const char *path){
+        1:  700:	unlink(path);
+        -:  701:	int serverSocket;
+        -:  702:    struct sockaddr_un serverAddr;
+        -:  703:
+        -:  704:    // create a Unix domain socket
+        1:  705:    if ((serverSocket = socket(AF_UNIX, SOCK_DGRAM, 0)) == -1) {
+    #####:  706:        perror("UDSSD: socket");
+    #####:  707:        exitProgram(EXIT_FAILURE);
+        -:  708:    }
+        1:  709:	allPaths[numPaths++] = path;
+        -:  710:
+        1:  711:	memset(&serverAddr, 0, sizeof(serverAddr));
+        -:  712:
+        -:  713:    // set up server family and name (path)
+        1:  714:    serverAddr.sun_family = AF_UNIX;
+        1:  715:    strncpy(serverAddr.sun_path, path, sizeof(serverAddr.sun_path) - 1);
+        -:  716:
+        -:  717:    // bind socket to specified path
+        1:  718:    if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
+    #####:  719:        perror("UDSSD: bind");
+    #####:  720:        close(serverSocket);
+    #####:  721:        exitProgram(EXIT_FAILURE);
+        -:  722:    }
+        -:  723:
+        -:  724:	// Set permissions for the socket file
+        -:  725:    // if (chmod(path, 0666) < 0) {
+        -:  726:    //     perror("chmod");
+        -:  727:    //     close(serverSocket);
+        -:  728:    //     unlink(path);
+        -:  729:    //     exitProgram(EXIT_FAILURE);
+        -:  730:    // }
+        -:  731:
+        1:  732:    printf("UDSSD is up\n");
+        -:  733:
+        1:  734:	return serverSocket;
+        -:  735:}
+        -:  736:// Unix Domain Sockets Datagram Client
+        1:  737:int createUDSCD(const char *path, struct sockaddr_un* serverAddr) {
+        -:  738:    int clientSocket;
+        -:  739:
+        -:  740:    // create a Unix domain socket
+        1:  741:    if ((clientSocket = socket(AF_UNIX, SOCK_DGRAM, 0)) == -1) {
+    #####:  742:        perror("UDSCD: socket");
+    #####:  743:        exitProgram(EXIT_FAILURE);
+        -:  744:    }
+        -:  745:
+        -:  746:    // make sure address is empty
+        1:  747:    memset(serverAddr, 0, sizeof(*serverAddr));
+        -:  748:
+        -:  749:    // set up server family and name (path)
+        1:  750:    serverAddr->sun_family = AF_UNIX;
+        1:  751:    strncpy(serverAddr->sun_path, path, sizeof(serverAddr->sun_path) - 1);
+        -:  752:
+        1:  753:    return clientSocket;  // address returned in pointer serverAddr
+        -:  754:}
+        -:  755:// Unix Domain Sockets Stream Server
+        3:  756:int createUDSSS(const char *path){
+        3:  757:	unlink(path);
+        -:  758:	int serverSocket;
+        -:  759:    struct sockaddr_un serverAddr;
+        -:  760:
+        -:  761:    // create a Unix domain socket
+        3:  762:    if ((serverSocket = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+    #####:  763:        perror("UDSSD: socket");
+    #####:  764:        exitProgram(EXIT_FAILURE);
+        -:  765:    }
+        3:  766:	allPaths[numPaths++] = path;
+        -:  767:
+        3:  768:	memset(&serverAddr, 0, sizeof(serverAddr));
+        -:  769:
+        -:  770:    // set up server family and name (path)
+        3:  771:    serverAddr.sun_family = AF_UNIX;
+        3:  772:    strncpy(serverAddr.sun_path, path, sizeof(serverAddr.sun_path) - 1);
+        -:  773:
+        -:  774:    // bind socket to specified path
+        3:  775:    if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
+    #####:  776:        perror("UDSSS: bind");
+    #####:  777:        close(serverSocket);
+    #####:  778:        exitProgram(EXIT_FAILURE);
+        -:  779:    }
+        -:  780:	
+        -:  781:	// listen for incoming connections
+        3:  782:	if (listen(serverSocket, MAX_CLIENTS) == -1) {
+    #####:  783:		perror("UDSSS: listen");
+    #####:  784:		close(serverSocket);
+    #####:  785:		exitProgram(EXIT_FAILURE);
+        -:  786:	}
+        -:  787:
+        3:  788:	printf("UDSSS: waiting to accept connection...\n");
+        -:  789:
+        -:  790:    struct sockaddr_in client_addr;
+        3:  791:    socklen_t client_len = sizeof(client_addr);
+        3:  792:    int client_sock = accept(serverSocket, (struct sockaddr *) &client_addr, &client_len);
+        3:  793:    if (client_sock < 0) {
+    #####:  794:        perror("UDSSS: accept");
+    #####:  795:        close(serverSocket);
+    #####:  796:        exitProgram(EXIT_FAILURE);
+        -:  797:    }
+        -:  798:
+        3:  799:    printf("UDSSS is up\n");
+        -:  800:	// store the server socket in the array to be able to close it at the end
+        3:  801:	allSockets[numSockets++] = serverSocket;
+        3:  802:	return client_sock;
+        -:  803:}
+        -:  804:// Unix Domain Sockets Stream Client
+        3:  805:int createUDSCS(const char *path){
+        -:  806:	int clientSocket;
+        -:  807:    struct sockaddr_un serverAddr;
+        -:  808:
+        -:  809:    // create a Unix domain socket
+        3:  810:    if ((clientSocket = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+    #####:  811:        perror("UDSCS: socket");
+    #####:  812:        exitProgram(EXIT_FAILURE);
+        -:  813:    }
+        -:  814:
+        3:  815:	memset(&serverAddr, 0, sizeof(serverAddr));
+        -:  816:
+        -:  817:    // set up server family and name (path)
+        3:  818:    serverAddr.sun_family = AF_UNIX;
+        3:  819:    strncpy(serverAddr.sun_path, path, sizeof(serverAddr.sun_path) - 1);
+        -:  820:
+        -:  821:	// connect to server
+        3:  822:    if (connect(clientSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == -1) {
+    #####:  823:		perror("UDSCS: connect");
+    #####:  824:		close(clientSocket);
+    #####:  825:		exitProgram(EXIT_FAILURE);
+        -:  826:	}
+        -:  827:
+        3:  828:	printf("UDSCS connected\n");
+        -:  829:
+        3:  830:	return clientSocket;
+        -:  831:}
+        -:  832:
+        2:  833:void handle_alarm(int sig) {
+        2:  834:	printf("Timeout reached. Exiting all processes!\n");
+        2:  835:	kill(0, SIGTERM); // Send SIGTERM signal to the process group - kill all processes
+    #####:  836:}
+        -:  837:
+        3:  838:void handle_term(int sig) {
+        3:  839:	printf("SIGTERM received (Timeout reached). Closing all sockets and exiting!\n");
+        3:  840:	exitProgram(EXIT_SUCCESS);
+    #####:  841:}
+        -:  842:
+        -:  843:
+        -:  844:// Exit program and close all sockets
+       34:  845:int exitProgram(int status) {
+        -:  846:	// close all sockets
+       65:  847:	for (int i = 0; i < numSockets; i++) {
+       31:  848:		if (allSockets[i] != -1){
+       31:  849:			close(allSockets[i]);
+        -:  850:		}
+        -:  851:	}
+        -:  852:	// close all pipes
+       84:  853:	for (int i = 0; i < numPipes; i++) {
+       50:  854:		if (allPipes[i] != -1){
+       50:  855:			close(allPipes[i]);
+        -:  856:		}
+        -:  857:	}
+        -:  858:	// unlink the UDS files
+       38:  859:	for (int i = 0; i < numPaths; i++) {
+        4:  860:		if (allPaths[i] != NULL){
+        4:  861:			unlink(allPaths[i]);
+        -:  862:		}
+        -:  863:	}
+        -:  864:	
+       34:  865:	exit(status);
+        -:  866:}
