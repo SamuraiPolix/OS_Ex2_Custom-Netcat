@@ -28,4 +28,5 @@ valgrind: mync
 	valgrind --tool=memcheck $(VALGRIND_FLAGS) ./mync 2>&1 | { egrep "lost| at " || true; }
 
 clean:
-	rm -f *.o mync
+	rm -f *.o mync uds/*
+	touch uds/socket
