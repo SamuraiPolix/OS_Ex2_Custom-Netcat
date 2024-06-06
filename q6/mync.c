@@ -701,6 +701,7 @@ int createUDSSD(const char *path){
         perror("UDSSD: socket");
         exitProgram(EXIT_FAILURE);
     }
+	allPaths[numPaths++] = path;
 
 	memset(&serverAddr, 0, sizeof(serverAddr));
 
@@ -757,6 +758,7 @@ int createUDSSS(const char *path){
         perror("UDSSD: socket");
         exitProgram(EXIT_FAILURE);
     }
+	allPaths[numPaths++] = path;
 
 	memset(&serverAddr, 0, sizeof(serverAddr));
 
@@ -845,11 +847,10 @@ int exitProgram(int status) {
 		}
 	}
 	// unlink the UDS files
-	// if (pathname1 != NULL){
-	// 	unlink(pathname1);
-	// }
-	// if (pathname2 != NULL){
-	// 	unlink(pathname2);
-	// }
+	for (int i = 0; i < numPaths; i++) {
+		if (allPaths[i] != NULL){
+			unlink(allPaths[i]);
+		}
+	}
 	exit(status);
 }
