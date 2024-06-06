@@ -12,6 +12,7 @@ int main(int argc, char* argv[]) {
     }
 
     char *p = argv[2];  // a pointer used to extract the command and arguments from argv
+    printf("argv[2]: %s\n", p); // print the command and arguments (for debugging purposes
     char *args[MAX_ARGS_SIZE];      // store pointers to the command and arguments
     int i = 0;      // index for args
     

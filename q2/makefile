@@ -26,14 +26,13 @@ mync: mync.o
 coverage: 
 	$(CC) $(GCOV) -o mync $(SOURCES)
 
-	./mync -e "../q1/ttt 123456789" < $(INPUTS_FOLDER)/draw.txt > $(OUTPUTS_FOLDER)/temp3.txt || true
-	./mync -e "../q1/ttt 123456789" < $(INPUTS_FOLDER)/ai_win.txt > $(OUTPUTS_FOLDER)/temp.txt || true
-	./mync -e "../q1/ttt 123456789" < $(INPUTS_FOLDER)/player_win.txt > $(OUTPUTS_FOLDER)/temp.txt || true
-	./mync -e "../q1/ttt 123456789" < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp2.txt || true
-	./mync -e "../q1/ttt12345678" < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp2.txt || true
-	./mync -e "../q1/ttt000  12345678" < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp2.txt || true
-	gcov mync.cpp
-
+	./mync -e "../q1/ttt 123456789" < $(INPUTS_FOLDER)/draw.txt > $(OUTPUTS_FOLDER)/temp1.txt || true
+	./mync -e "../q1/ttt 123456789" < $(INPUTS_FOLDER)/ai_win.txt > $(OUTPUTS_FOLDER)/temp2.txt || true
+	./mync -e "../q1/ttt 123456789" < $(INPUTS_FOLDER)/player_win.txt > $(OUTPUTS_FOLDER)/temp3.txt || true
+	./mync -e "../q1/ttt 123456789" < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp4.txt || true
+	./mync -e "../q1/ttt12345678" < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp5.txt || true
+	./mync -e "../q1/ttt000  12345678" < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp6.txt || true
+	./gcov/invalid_exec_command.sh < $(INPUTS_FOLDER)/player_win.txt > $(OUTPUTS_FOLDER)/temp7.txt 
 	./mync  - e " . ./  q1 /t tt  1234 56789 " < $(INPUTS_FOLDER)/invalid_input.txt > $(OUTPUTS_FOLDER)/temp2.txt || true
 	gcov mync.cpp
 tidy:
